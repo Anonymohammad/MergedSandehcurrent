@@ -2,6 +2,15 @@
 // FULLY COMPATIBLE with existing Employee app data structure
 // Based on Employee Code.gs with Management features added
 
+// Optional namespace for safe testing without touching production sheets
+const DATA_NAMESPACE = (PropertiesService.getScriptProperties().getProperty('DATA_NAMESPACE') || '').trim();
+
+function getSheetWithNamespace(sheetName, ss) {
+  const spreadsheet = ss || SpreadsheetApp.getActiveSpreadsheet();
+  const resolvedName = DATA_NAMESPACE ? `${DATA_NAMESPACE}${sheetName}` : sheetName;
+  return spreadsheet.getSheetByName(resolvedName);
+}
+
 // Database structure definition (EXACT from Employee Code.gs)
 const REQUIRED_SHEETS = {
   // Enhanced Employee Management with language support (UNCHANGED)
@@ -189,13 +198,14 @@ function include(filename) {
 function initializeDatabase() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let isNewDatabase = false;
-  
+
   Object.entries(REQUIRED_SHEETS).forEach(([sheetName, config]) => {
-    let sheet = ss.getSheetByName(sheetName);
+    let sheet = getSheetWithNamespace(sheetName, ss);
     if (!sheet) {
-      sheet = ss.insertSheet(sheetName);
+      const resolvedName = DATA_NAMESPACE ? `${DATA_NAMESPACE}${sheetName}` : sheetName;
+      sheet = ss.insertSheet(resolvedName);
       isNewDatabase = true;
-      
+
       sheet.getRange(1, 1, 1, config.requiredHeaders.length)
            .setValues([config.requiredHeaders])
            .setBackground('#E6E6E6')
@@ -255,7 +265,7 @@ function initializeDatabase() {
 
 // Enhanced employee initialization (EXACT from Employee Code.gs)
 function initializeDefaultEmployeeData() {
-  const employeeSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employees');
+  const employeeSheet = getSheetWithNamespace('Employees');
   
   if (!employeeSheet) {
     console.log('Employees sheet not found');
@@ -340,7 +350,7 @@ function initializeDefaultEmployeeData() {
 }
 
 function initializeAggregatorSettingsIfNeeded() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+  const sheet = getSheetWithNamespace('DeliveryAggregators');
   if (!sheet) return;
 
   if (sheet.getLastRow() > 1) {
@@ -366,7 +376,7 @@ function initializeAggregatorSettingsIfNeeded() {
 }
 
 function initializeSystemSettingsIfNeeded() {
-  const settingsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SystemSettings');
+  const settingsSheet = getSheetWithNamespace('SystemSettings');
   
   if (!settingsSheet) {
     console.log('SystemSettings sheet not found');
@@ -409,7 +419,7 @@ function initializeSystemSettingsIfNeeded() {
 // Enhanced employee validation (EXACT from Employee Code.gs)
 function validateEmployeePin(pin) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employees');
+    const sheet = getSheetWithNamespace('Employees');
     if (!sheet) return JSON.stringify({success: false, message: 'Employee system not initialized'});
     
     const data = sheet.getDataRange().getValues();
@@ -457,7 +467,7 @@ function validateEmployeePin(pin) {
 // Update employee language preference (EXACT from Employee Code.gs)
 function updateEmployeeLanguage(employeeId, language) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Employees');
+    const sheet = getSheetWithNamespace('Employees');
     if (!sheet) {
       return JSON.stringify({success: false, message: 'Employee system not initialized'});
     }
@@ -502,7 +512,7 @@ function updateEmployeeLanguage(employeeId, language) {
 // Get management PIN (EXACT from Employee Code.gs)
 function getManagementPin() {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('SystemSettings');
+    const sheet = getSheetWithNamespace('SystemSettings');
     if (!sheet) return '1234';
     
     const data = sheet.getDataRange().getValues();
@@ -632,7 +642,7 @@ function saveDailyEntry(entryData) {
     
     // Save Shawarma Stack Data
     if (entryData.shawarmaStack) {
-      const shawarmaSheet = ss.getSheetByName('DailyShawarmaStack');
+      const shawarmaSheet = getSheetWithNamespace('DailyShawarmaStack', ss);
       const stackData = entryData.shawarmaStack;
       
       const startingWeight = parseFloat(stackData.starting_weight) || 0;
@@ -787,7 +797,7 @@ function generateDailyReport(date) {
 // Helper function to get sheet data (EXACT from Employee Code.gs)
 function getSheetData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(sheetName);
+  const sheet = getSheetWithNamespace(sheetName, ss);
   
   if (!sheet || sheet.getLastRow() <= 1) {
     return [];
@@ -808,7 +818,7 @@ function getSheetData(sheetName) {
 // Save Raw Proteins Data (EXACT from Employee Code.gs)
 function saveRawProteinsData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const rawProteinsSheet = ss.getSheetByName('DailyRawProteins');
+  const rawProteinsSheet = getSheetWithNamespace('DailyRawProteins', ss);
   const rawData = entryData.rawProteins;
   
   const row = [
@@ -834,7 +844,7 @@ function saveRawProteinsData(entryData, entryDate, employeeId) {
 // Save Marinated Proteins Data (EXACT from Employee Code.gs)
 function saveMarinatedProteinsData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const marinatedSheet = ss.getSheetByName('DailyMarinatedProteins');
+  const marinatedSheet = getSheetWithNamespace('DailyMarinatedProteins', ss);
   const marinatedData = entryData.marinatedProteins;
   
   const row = [
@@ -869,7 +879,7 @@ function saveMarinatedProteinsData(entryData, entryDate, employeeId) {
 // Save Bread Data (EXACT from Employee Code.gs)
 function saveBreadData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const breadSheet = ss.getSheetByName('DailyBreadTracking');
+  const breadSheet = getSheetWithNamespace('DailyBreadTracking', ss);
   const breadData = entryData.bread;
   
   const row = [
@@ -895,7 +905,7 @@ function saveBreadData(entryData, entryDate, employeeId) {
 // Save High Cost Items Data (EXACT from Employee Code.gs)
 function saveHighCostItemsData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const highCostSheet = ss.getSheetByName('DailyHighCostItems');
+  const highCostSheet = getSheetWithNamespace('DailyHighCostItems', ss);
   const highCostData = entryData.highCostItems;
   
   const row = [
@@ -917,7 +927,7 @@ function saveHighCostItemsData(entryData, entryDate, employeeId) {
 // Save Sales Data with payment breakdown linkage
 function saveSalesData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const salesSheet = ss.getSheetByName('DailySales');
+  const salesSheet = getSheetWithNamespace('DailySales', ss);
   const salesData = entryData.sales || {};
 
   const totalRevenue = parseFloat(salesData.total_revenue) || 0;
@@ -943,7 +953,7 @@ function saveSalesData(entryData, entryDate, employeeId) {
 // Save payment method and cash expense breakdown
 function saveSalesBreakdown(entryData, entryDate, employeeId, salesId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const breakdownSheet = ss.getSheetByName('DailySalesBreakdown');
+  const breakdownSheet = getSheetWithNamespace('DailySalesBreakdown', ss);
   const breakdown = entryData.paymentBreakdown || {};
 
   const cashSales = parseFloat(breakdown.cash_sales) || 0;
@@ -969,7 +979,7 @@ function saveSalesBreakdown(entryData, entryDate, employeeId, salesId) {
 }
 
 function savePettyCashEntries(entries, entryDate, salesId, employeeId) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DailyPettyCash');
+  const sheet = getSheetWithNamespace('DailyPettyCash');
   if (!sheet) return;
 
   entries
@@ -1023,7 +1033,7 @@ function getData() {
 }
 
 function getAggregatorSettings(returnRaw) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+  const sheet = getSheetWithNamespace('DeliveryAggregators');
   if (!sheet || sheet.getLastRow() <= 1) return [];
 
   const data = sheet.getDataRange().getValues();
@@ -1041,7 +1051,7 @@ function getAggregatorSettings(returnRaw) {
 function saveAggregatorSettings(settingsJson) {
   try {
     const settings = JSON.parse(settingsJson);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+    const sheet = getSheetWithNamespace('DeliveryAggregators');
     if (!sheet) {
       return JSON.stringify({ success: false, message: 'Aggregator sheet missing' });
     }
@@ -1091,7 +1101,7 @@ function checkExistingWeeklyEntry(weekStartDate) {
 
 function deleteExistingWeeklyEntries(weekStartDate) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('WeeklyInventory');
+  const sheet = getSheetWithNamespace('WeeklyInventory', ss);
   if (!sheet) return;
   const target = new Date(weekStartDate).toDateString();
   const data = sheet.getDataRange().getValues();
@@ -1105,13 +1115,13 @@ function deleteExistingWeeklyEntries(weekStartDate) {
   }
 }
 
-function saveWeeklyEntry(entryData) {
-  try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('WeeklyInventory');
-    const weekStart = new Date(entryData.weekStartDate).toDateString();
-    const weekEnd = entryData.weekEndDate;
-    const employeeId = entryData.employeeId || 'unknown';
+  function saveWeeklyEntry(entryData) {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheet = getSheetWithNamespace('WeeklyInventory', ss);
+      const weekStart = new Date(entryData.weekStartDate).toDateString();
+      const weekEnd = entryData.weekEndDate;
+      const employeeId = entryData.employeeId || 'unknown';
 
     if (entryData.isUpdate) {
       if (!entryData.managementPin || !validateManagementPin(entryData.managementPin)) {
