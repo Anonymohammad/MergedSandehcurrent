@@ -288,7 +288,7 @@ function DailyEntryTab() {
         const ordersWeight = parseFloat(shawarmaStack.orders_weight) || 0;
         
         // Calculate loss (natural cooking/heat shrinkage)
-        const lossWeight = startingWeight - (ordersWeight + shavingWeight + staffMealsWeight + remainingWeight);
+        const lossWeight = Math.max(0, startingWeight - (ordersWeight + shavingWeight + staffMealsWeight + remainingWeight));
         const lossPercentage = startingWeight > 0 ? (lossWeight / startingWeight) * 100 : 0;
         
         // Calculate total waste (loss + remaining)
