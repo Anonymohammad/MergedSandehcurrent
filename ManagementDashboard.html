@@ -55,7 +55,7 @@ function ManagementDashboard() {
         const ordersWeight = parseFloat(shawarma.orders_weight_kg) || 0;
         const revenueQar = parseFloat(shawarma.revenue_qar) || 0;
 
-        const lossWeight = startingWeight - (ordersWeight + shavingWeight + staffMealsWeight + remainingWeight);
+        const lossWeight = Math.max(0, startingWeight - (ordersWeight + shavingWeight + staffMealsWeight + remainingWeight));
         const lossPercentage = startingWeight > 0 ? (lossWeight / startingWeight) * 100 : 0;
 
         const totalWasteWeight = lossWeight + remainingWeight;
@@ -122,6 +122,41 @@ function ManagementDashboard() {
                     console.log("Received data:", data);
                     try {
                         const parsedData = JSON.parse(data);
+
+                        // Normalize data availability structure for UI
+                        parsedData.data_found = {
+                            shawarma: !!parsedData.shawarma,
+                            sales: !!parsedData.sales,
+                            rawProteins: !!parsedData.rawProteins,
+                            bread: !!parsedData.bread,
+                            marinatedProteins: !!parsedData.marinatedProteins,
+                            highCostItems: !!parsedData.highCostItems
+                        };
+
+                        // Normalize inventory view for UI cards
+                        const normalizeValue = (value) => {
+                            if (value === undefined || value === null || value === '') return null;
+                            return value;
+                        };
+
+                        const rawProteins = parsedData.rawProteins || {};
+                        const bread = parsedData.bread || {};
+                        const highCostItems = parsedData.highCostItems || {};
+
+                        parsedData.inventory = {
+                            chicken_shawarma_remaining: normalizeValue(rawProteins.chicken_shawarma_remaining),
+                            frozen_chicken_breast_remaining: normalizeValue(rawProteins.frozen_chicken_breast_remaining),
+                            steak_remaining: normalizeValue(rawProteins.steak_remaining),
+                            saj_bread_remaining: normalizeValue(bread.saj_bread_remaining),
+                            bread_rolls_remaining: normalizeValue(bread.bread_rolls_remaining),
+                            pita_bread_remaining: normalizeValue(bread.pita_bread_remaining),
+                            cream_remaining: normalizeValue(highCostItems.cream_remaining),
+                            mayo_remaining: normalizeValue(highCostItems.mayo_remaining)
+                        };
+
+                        // Track which date was requested for clarity in the dashboard
+                        parsedData.requested_date = dateParam || parsedData.date;
+
                         if (parsedData.shawarma) {
                             parsedData.shawarma = computeShawarmaMetrics(parsedData.shawarma);
                         }

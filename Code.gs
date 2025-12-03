@@ -596,7 +596,7 @@ function saveDailyEntry(entryData) {
       const costPerKg = 12.35;
       const stackCost = startingWeight * costPerKg;
       
-      const lossWeight = startingWeight - (shavingWeight + staffMealsWeight + ordersWeight + remainingWeight);
+      const lossWeight = Math.max(0, startingWeight - (shavingWeight + staffMealsWeight + ordersWeight + remainingWeight));
       const lossPercentage = startingWeight > 0 ? (lossWeight / startingWeight) * 100 : 0;
       
       const revenuePerKg = ordersWeight > 0 ? shawarmaRevenue / ordersWeight : 0;
@@ -702,6 +702,14 @@ function generateDailyReport(date) {
     const report = {
       date: targetDateString,
       dataFound: !!(todayShawarma || todaySales || todayRawProteins || todayBread || todayMarinatedProteins || todayHighCost),
+      data_found: {
+        shawarma: !!todayShawarma,
+        sales: !!todaySales,
+        rawProteins: !!todayRawProteins,
+        marinatedProteins: !!todayMarinatedProteins,
+        bread: !!todayBread,
+        highCostItems: !!todayHighCost
+      },
       shawarma: todayShawarma || null,
       sales: todaySales || null,
       rawProteins: todayRawProteins || null,
