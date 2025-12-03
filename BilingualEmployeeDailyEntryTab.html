@@ -1,0 +1,974 @@
+<script type="text/babel">
+function BilingualEmployeeDailyEntryTab({ employeeSession }) {
+    const { t } = React.useContext(window.LanguageContext);
+    
+    const [formData, setFormData] = React.useState({
+        shawarmaStack: {
+            starting_weight: '',
+            remaining_weight: '',
+            shaving_weight: '',
+            staff_meals_weight: '',
+            orders_weight: ''
+        },
+        rawProteins: {
+            frozen_chicken_breast_opening: '',
+            frozen_chicken_breast_received: '',
+            frozen_chicken_breast_expired: '',
+            frozen_chicken_breast_remaining: '',
+            chicken_shawarma_opening: '',
+            chicken_shawarma_received: '',
+            chicken_shawarma_expired: '',
+            chicken_shawarma_remaining: '',
+            steak_opening: '',
+            steak_received: '',
+            steak_expired: '',
+            steak_remaining: ''
+        },
+        marinatedProteins: {
+            fahita_chicken_opening: '',
+            fahita_chicken_received: '',
+            fahita_chicken_expired: '',
+            fahita_chicken_remaining: '',
+            chicken_sub_opening: '',
+            chicken_sub_received: '',
+            chicken_sub_expired: '',
+            chicken_sub_remaining: '',
+            spicy_strips_opening: '',
+            spicy_strips_received: '',
+            spicy_strips_expired: '',
+            spicy_strips_remaining: '',
+            original_strips_opening: '',
+            original_strips_received: '',
+            original_strips_expired: '',
+                original_strips_remaining: '',
+    // ADD THIS NEW SECTION:
+    marinated_steak_opening: '',
+    marinated_steak_received: '',
+    marinated_steak_expired: '',
+    marinated_steak_remaining: ''
+        },
+        bread: {
+            saj_bread_opening: '',
+            saj_bread_received: '',
+            saj_bread_expired: '',
+            saj_bread_remaining: '',
+            pita_bread_opening: '',
+            pita_bread_received: '',
+            pita_bread_expired: '',
+            pita_bread_remaining: '',
+            bread_rolls_opening: '',
+            bread_rolls_received: '',
+            bread_rolls_expired: '',
+            bread_rolls_remaining: ''
+        },
+        highCostItems: {
+            cream_opening: '',
+            cream_received: '',
+            cream_expired: '',
+            cream_remaining: '',
+            mayo_opening: '',
+            mayo_received: '',
+            mayo_expired: '',
+            mayo_remaining: ''
+        },
+        sales: {
+            total_revenue: '',
+            shawarma_revenue: ''
+        },
+        notes: ''
+    });
+    
+    const [loading, setLoading] = React.useState(false);
+    const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
+    const [managementPin, setManagementPin] = React.useState('');
+    const [showPinInput, setShowPinInput] = React.useState(false);
+    const [duplicateWarning, setDuplicateWarning] = React.useState(false);
+    const [isUpdateMode, setIsUpdateMode] = React.useState(false);
+    const [loadingExistingData, setLoadingExistingData] = React.useState(false);
+    const [checkingExistingData, setCheckingExistingData] = React.useState(false);
+    const [fieldsLocked, setFieldsLocked] = React.useState(false);
+    const [showLoadExistingPin, setShowLoadExistingPin] = React.useState(false);
+    const [loadExistingPin, setLoadExistingPin] = React.useState('');
+    const [pinError, setPinError] = React.useState(false);
+    
+    React.useEffect(() => {
+        if (selectedDate) {
+            checkExistingEntry();
+        }
+    }, [selectedDate]);
+    
+    React.useEffect(() => {
+        if (!checkingExistingData && !duplicateWarning && selectedDate === new Date().toISOString().split('T')[0]) {
+            loadPreviousDayData();
+        }
+    }, [checkingExistingData, duplicateWarning, selectedDate]);
+    
+    const checkExistingEntry = async () => {
+        setCheckingExistingData(true);
+        setIsUpdateMode(false);
+        setDuplicateWarning(false);
+        setFieldsLocked(true);
+        setShowLoadExistingPin(false);
+        setPinError(false);
+        setLoadExistingPin('');
+        
+        try {
+            await google.script.run
+                .withSuccessHandler(result => {
+                    const data = JSON.parse(result);
+                    setCheckingExistingData(false);
+                    
+                    if (data.exists) {
+                        setDuplicateWarning(true);
+                        setFieldsLocked(true);
+                        setShowLoadExistingPin(true);
+                    } else {
+                        resetFormToClean();
+                    }
+                })
+                .withFailureHandler(error => {
+                    setCheckingExistingData(false);
+                    resetFormToClean();
+                })
+                .checkExistingEntry(selectedDate);
+        } catch (error) {
+            setCheckingExistingData(false);
+            resetFormToClean();
+        }
+    };
+    
+    const loadPreviousDayData = async () => {
+        if (selectedDate === new Date().toISOString().split('T')[0] && !duplicateWarning) {
+            try {
+                const previousDate = new Date(selectedDate);
+                previousDate.setDate(previousDate.getDate() - 1);
+                const prevDateString = previousDate.toISOString().split('T')[0];
+                
+                await google.script.run
+                    .withSuccessHandler(result => {
+                        const data = JSON.parse(result);
+                        if (data && data.dataFound) {
+                            setFormData(prev => ({
+                                ...prev,
+                                rawProteins: {
+                                    ...prev.rawProteins,
+                                    frozen_chicken_breast_opening: (data.rawProteins && data.rawProteins.frozen_chicken_breast_remaining) ? data.rawProteins.frozen_chicken_breast_remaining : '',
+                                    chicken_shawarma_opening: (data.rawProteins && data.rawProteins.chicken_shawarma_remaining) ? data.rawProteins.chicken_shawarma_remaining : '',
+                                    steak_opening: (data.rawProteins && data.rawProteins.steak_remaining) ? data.rawProteins.steak_remaining : ''
+                                },
+                                marinatedProteins: {
+                                    ...prev.marinatedProteins,
+                                    fahita_chicken_opening: (data.marinatedProteins && data.marinatedProteins.fahita_chicken_remaining) ? data.marinatedProteins.fahita_chicken_remaining : '',
+                                    chicken_sub_opening: (data.marinatedProteins && data.marinatedProteins.chicken_sub_remaining) ? data.marinatedProteins.chicken_sub_remaining : '',
+                                    spicy_strips_opening: (data.marinatedProteins && data.marinatedProteins.spicy_strips_remaining) ? data.marinatedProteins.spicy_strips_remaining : '',
+                                    original_strips_opening: (data.marinatedProteins && data.marinatedProteins.original_strips_remaining) ? data.marinatedProteins.original_strips_remaining : '',
+    // ADD THIS LINE:
+    marinated_steak_opening: (data.marinatedProteins && data.marinatedProteins.marinated_steak_remaining) ? data.marinatedProteins.marinated_steak_remaining : ''
+                                },
+                                bread: {
+                                    ...prev.bread,
+                                    saj_bread_opening: (data.bread && data.bread.saj_bread_remaining) ? data.bread.saj_bread_remaining : '',
+                                    pita_bread_opening: (data.bread && data.bread.pita_bread_remaining) ? data.bread.pita_bread_remaining : '',
+                                    bread_rolls_opening: (data.bread && data.bread.bread_rolls_remaining) ? data.bread.bread_rolls_remaining : ''
+                                },
+                                highCostItems: {
+                                    ...prev.highCostItems,
+                                    cream_opening: (data.highCostItems && data.highCostItems.cream_remaining) ? data.highCostItems.cream_remaining : '',
+                                    mayo_opening: (data.highCostItems && data.highCostItems.mayo_remaining) ? data.highCostItems.mayo_remaining : ''
+                                }
+                            }));
+                        }
+                    })
+                    .withFailureHandler(error => {
+                        console.error('Error loading previous day data:', error);
+                    })
+                    .generateDailyReport(prevDateString);
+            } catch (error) {
+                console.error('Error loading previous day data:', error);
+            }
+        }
+    };
+    
+    const confirmLoadExistingData = async () => {
+        if (!loadExistingPin || loadExistingPin.trim() === '') {
+            return;
+        }
+        
+        setLoadingExistingData(true);
+        setPinError(false);
+        
+        try {
+            await google.script.run
+                .withSuccessHandler(isValid => {
+                    if (!isValid) {
+                        setLoadingExistingData(false);
+                        setPinError(true);
+                        return;
+                    }
+                    
+                    google.script.run
+                        .withSuccessHandler(dataResult => {
+                            const data = JSON.parse(dataResult);
+                            
+                            if (data.dataFound) {
+                                setFormData({
+                                    shawarmaStack: {
+                                        starting_weight: data.shawarma ? String(data.shawarma.starting_weight_kg || '') : '',
+                                        remaining_weight: data.shawarma ? String(data.shawarma.remaining_weight_kg || '') : '',
+                                        shaving_weight: data.shawarma ? String(data.shawarma.shaving_weight_kg || '') : '',
+                                        staff_meals_weight: data.shawarma ? String(data.shawarma.staff_meals_weight_kg || '') : '',
+                                        orders_weight: data.shawarma ? String(data.shawarma.orders_weight_kg || '') : ''
+                                    },
+                                    sales: {
+                                        total_revenue: data.sales ? String(data.sales.total_revenue || '') : '',
+                                        shawarma_revenue: data.sales ? String(data.sales.shawarma_revenue || '') : ''
+                                    },
+                                    rawProteins: {
+                                        frozen_chicken_breast_opening: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_opening || '') : '',
+                                        frozen_chicken_breast_received: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_received || '') : '',
+                                        frozen_chicken_breast_expired: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_expired || '') : '',
+                                        frozen_chicken_breast_remaining: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_remaining || '') : '',
+                                        chicken_shawarma_opening: data.rawProteins ? String(data.rawProteins.chicken_shawarma_opening || '') : '',
+                                        chicken_shawarma_received: data.rawProteins ? String(data.rawProteins.chicken_shawarma_received || '') : '',
+                                        chicken_shawarma_expired: data.rawProteins ? String(data.rawProteins.chicken_shawarma_expired || '') : '',
+                                        chicken_shawarma_remaining: data.rawProteins ? String(data.rawProteins.chicken_shawarma_remaining || '') : '',
+                                        steak_opening: data.rawProteins ? String(data.rawProteins.steak_opening || '') : '',
+                                        steak_received: data.rawProteins ? String(data.rawProteins.steak_received || '') : '',
+                                        steak_expired: data.rawProteins ? String(data.rawProteins.steak_expired || '') : '',
+                                        steak_remaining: data.rawProteins ? String(data.rawProteins.steak_remaining || '') : ''
+                                    },
+                                    marinatedProteins: {
+                                        fahita_chicken_opening: data.marinatedProteins ? String(data.marinatedProteins.fahita_chicken_opening || '') : '',
+                                        fahita_chicken_received: data.marinatedProteins ? String(data.marinatedProteins.fahita_chicken_received || '') : '',
+                                        fahita_chicken_expired: data.marinatedProteins ? String(data.marinatedProteins.fahita_chicken_expired || '') : '',
+                                        fahita_chicken_remaining: data.marinatedProteins ? String(data.marinatedProteins.fahita_chicken_remaining || '') : '',
+                                        chicken_sub_opening: data.marinatedProteins ? String(data.marinatedProteins.chicken_sub_opening || '') : '',
+                                        chicken_sub_received: data.marinatedProteins ? String(data.marinatedProteins.chicken_sub_received || '') : '',
+                                        chicken_sub_expired: data.marinatedProteins ? String(data.marinatedProteins.chicken_sub_expired || '') : '',
+                                        chicken_sub_remaining: data.marinatedProteins ? String(data.marinatedProteins.chicken_sub_remaining || '') : '',
+                                        spicy_strips_opening: data.marinatedProteins ? String(data.marinatedProteins.spicy_strips_opening || '') : '',
+                                        spicy_strips_received: data.marinatedProteins ? String(data.marinatedProteins.spicy_strips_received || '') : '',
+                                        spicy_strips_expired: data.marinatedProteins ? String(data.marinatedProteins.spicy_strips_expired || '') : '',
+                                        spicy_strips_remaining: data.marinatedProteins ? String(data.marinatedProteins.spicy_strips_remaining || '') : '',
+                                        original_strips_opening: data.marinatedProteins ? String(data.marinatedProteins.original_strips_opening || '') : '',
+                                        original_strips_received: data.marinatedProteins ? String(data.marinatedProteins.original_strips_received || '') : '',
+                                        original_strips_expired: data.marinatedProteins ? String(data.marinatedProteins.original_strips_expired || '') : '',
+                                        original_strips_remaining: data.marinatedProteins ? String(data.marinatedProteins.original_strips_remaining || '') : '',
+    // ADD THESE LINES:
+    marinated_steak_opening: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_opening || '') : '',
+    marinated_steak_received: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_received || '') : '',
+    marinated_steak_expired: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_expired || '') : '',
+    marinated_steak_remaining: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_remaining || '') : ''
+                                    },
+                                    bread: {
+                                        saj_bread_opening: data.bread ? String(data.bread.saj_bread_opening || '') : '',
+                                        saj_bread_received: data.bread ? String(data.bread.saj_bread_received || '') : '',
+                                        saj_bread_expired: data.bread ? String(data.bread.saj_bread_expired || '') : '',
+                                        saj_bread_remaining: data.bread ? String(data.bread.saj_bread_remaining || '') : '',
+                                        pita_bread_opening: data.bread ? String(data.bread.pita_bread_opening || '') : '',
+                                        pita_bread_received: data.bread ? String(data.bread.pita_bread_received || '') : '',
+                                        pita_bread_expired: data.bread ? String(data.bread.pita_bread_expired || '') : '',
+                                        pita_bread_remaining: data.bread ? String(data.bread.pita_bread_remaining || '') : '',
+                                        bread_rolls_opening: data.bread ? String(data.bread.bread_rolls_opening || '') : '',
+                                        bread_rolls_received: data.bread ? String(data.bread.bread_rolls_received || '') : '',
+                                        bread_rolls_expired: data.bread ? String(data.bread.bread_rolls_expired || '') : '',
+                                        bread_rolls_remaining: data.bread ? String(data.bread.bread_rolls_remaining || '') : ''
+                                    },
+                                    highCostItems: {
+                                        cream_opening: data.highCostItems ? String(data.highCostItems.cream_opening || '') : '',
+                                        cream_received: data.highCostItems ? String(data.highCostItems.cream_received || '') : '',
+                                        cream_expired: data.highCostItems ? String(data.highCostItems.cream_expired || '') : '',
+                                        cream_remaining: data.highCostItems ? String(data.highCostItems.cream_remaining || '') : '',
+                                        mayo_opening: data.highCostItems ? String(data.highCostItems.mayo_opening || '') : '',
+                                        mayo_received: data.highCostItems ? String(data.highCostItems.mayo_received || '') : '',
+                                        mayo_expired: data.highCostItems ? String(data.highCostItems.mayo_expired || '') : '',
+                                        mayo_remaining: data.highCostItems ? String(data.highCostItems.mayo_remaining || '') : ''
+                                    },
+                                    notes: data.notes || ''
+                                });
+                            }
+
+                            setFieldsLocked(false);
+                            setDuplicateWarning(false);
+                            setIsUpdateMode(true);
+                            setShowLoadExistingPin(false);
+                            setLoadExistingPin('');
+                            setLoadingExistingData(false);
+                            setPinError(false);
+                        })
+                        .withFailureHandler(error => {
+                            setLoadingExistingData(false);
+                        })
+                        .generateDailyReport(selectedDate);
+                })
+                .withFailureHandler(error => {
+                    setLoadingExistingData(false);
+                    setPinError(true);
+                })
+                .validateManagementPin(loadExistingPin);
+        } catch (error) {
+            setLoadingExistingData(false);
+            setPinError(true);
+        }
+    };
+
+    const resetFormToClean = () => {
+        setFormData({
+            shawarmaStack: {
+                starting_weight: '', remaining_weight: '', shaving_weight: '',
+                staff_meals_weight: '', orders_weight: ''
+            },
+            rawProteins: {
+                frozen_chicken_breast_opening: '', frozen_chicken_breast_received: '', 
+                frozen_chicken_breast_expired: '', frozen_chicken_breast_remaining: '',
+                chicken_shawarma_opening: '', chicken_shawarma_received: '', 
+                chicken_shawarma_expired: '', chicken_shawarma_remaining: '',
+                steak_opening: '', steak_received: '', steak_expired: '', steak_remaining: ''
+            },
+            marinatedProteins: {
+                fahita_chicken_opening: '', fahita_chicken_received: '', fahita_chicken_expired: '', fahita_chicken_remaining: '',
+                chicken_sub_opening: '', chicken_sub_received: '', chicken_sub_expired: '', chicken_sub_remaining: '',
+                spicy_strips_opening: '', spicy_strips_received: '', spicy_strips_expired: '', spicy_strips_remaining: '',
+                original_strips_opening: '', original_strips_received: '', original_strips_expired: '', original_strips_remaining: '',
+    // ADD THESE LINES:
+    marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
+},
+            bread: {
+                saj_bread_opening: '', saj_bread_received: '', saj_bread_expired: '', saj_bread_remaining: '',
+                pita_bread_opening: '', pita_bread_received: '', pita_bread_expired: '', pita_bread_remaining: '',
+                bread_rolls_opening: '', bread_rolls_received: '', bread_rolls_expired: '', bread_rolls_remaining: ''
+            },
+            highCostItems: {
+                cream_opening: '', cream_received: '', cream_expired: '', cream_remaining: '',
+                mayo_opening: '', mayo_received: '', mayo_expired: '', mayo_remaining: ''
+            },
+            sales: {
+                total_revenue: '', shawarma_revenue: ''
+            },
+            notes: ''
+        });
+        
+        setDuplicateWarning(false);
+        setIsUpdateMode(false);
+        setFieldsLocked(false);
+        setShowLoadExistingPin(false);
+        setLoadExistingPin('');
+        setLoadingExistingData(false);
+        setPinError(false);
+    };
+    
+    const handleInputChange = (section, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [section]: {
+                ...prev[section],
+                [field]: value
+            }
+        }));
+    };
+    
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (isUpdateMode && !showPinInput) {
+            setShowPinInput(true);
+            return;
+        }
+
+        if (isUpdateMode && showPinInput) {
+            if (!managementPin || managementPin.trim() === '') {
+                alert(t('pinRequiredToUpdate'));
+                return;
+            }
+        }
+        
+        setLoading(true);
+        
+        try {
+            const entryData = {
+                date: selectedDate,
+                shawarmaStack: formData.shawarmaStack,
+                sales: formData.sales,
+                rawProteins: formData.rawProteins,
+                marinatedProteins: formData.marinatedProteins,
+                bread: formData.bread,
+                highCostItems: formData.highCostItems,
+                notes: formData.notes,
+                isUpdate: isUpdateMode,
+                managementPin: isUpdateMode ? managementPin : null,
+                employeeId: employeeSession.employeeId
+            };
+            
+            await google.script.run
+                .withSuccessHandler(result => {
+                    const response = JSON.parse(result);
+                    alert(response.message);
+                    
+                    if (response.success) {
+                        resetForm();
+                        setDuplicateWarning(false);
+                        setShowPinInput(false);
+                        setManagementPin('');
+                        setSelectedDate(new Date().toISOString().split('T')[0]);
+                    }
+                    setLoading(false);
+                })
+                .withFailureHandler(error => {
+                    alert('Error saving entry: ' + error.message);
+                    setLoading(false);
+                })
+                .saveDailyEntry(entryData);
+                
+        } catch (error) {
+            alert('Error submitting form: ' + error.message);
+            setLoading(false);
+        }
+    };
+    
+    const resetForm = () => {
+        setFormData({
+            shawarmaStack: {
+                starting_weight: '', remaining_weight: '', shaving_weight: '',
+                staff_meals_weight: '', orders_weight: ''
+            },
+            rawProteins: {
+                frozen_chicken_breast_opening: '', frozen_chicken_breast_received: '', frozen_chicken_breast_expired: '', frozen_chicken_breast_remaining: '',
+                chicken_shawarma_opening: '', chicken_shawarma_received: '', chicken_shawarma_expired: '', chicken_shawarma_remaining: '',
+                steak_opening: '', steak_received: '', steak_expired: '', steak_remaining: ''
+            },
+            marinatedProteins: {
+                fahita_chicken_opening: '', fahita_chicken_received: '', fahita_chicken_expired: '', fahita_chicken_remaining: '',
+                chicken_sub_opening: '', chicken_sub_received: '', chicken_sub_expired: '', chicken_sub_remaining: '',
+                spicy_strips_opening: '', spicy_strips_received: '', spicy_strips_expired: '', spicy_strips_remaining: '',
+                original_strips_opening: '', original_strips_received: '', original_strips_expired: '', original_strips_remaining: '',
+    // ADD THESE LINES:
+    marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
+            },
+            bread: {
+                saj_bread_opening: '', saj_bread_received: '', saj_bread_expired: '', saj_bread_remaining: '',
+                pita_bread_opening: '', pita_bread_received: '', pita_bread_expired: '', pita_bread_remaining: '',
+                bread_rolls_opening: '', bread_rolls_received: '', bread_rolls_expired: '', bread_rolls_remaining: ''
+            },
+            highCostItems: {
+                cream_opening: '', cream_received: '', cream_expired: '', cream_remaining: '',
+                mayo_opening: '', mayo_received: '', mayo_expired: '', mayo_remaining: ''
+            },
+            sales: {
+                total_revenue: '', shawarma_revenue: ''
+            },
+            notes: ''
+        });
+        setIsUpdateMode(false);
+    };
+    
+    const cancelUpdate = () => {
+        setShowPinInput(false);
+        setManagementPin('');
+        setFieldsLocked(false);
+    };
+    
+    const renderInventorySection = (titleKey, sectionKey, items, unit) => {
+        return React.createElement('div', {
+            className: 'mb-6'
+        },
+            React.createElement('h4', {
+                className: 'font-medium text-gray-700 mb-3'
+            }, t(titleKey)),
+            React.createElement('div', {
+                className: 'overflow-x-auto'
+            },
+                React.createElement('table', {
+                    className: 'min-w-full border-collapse'
+                },
+                    React.createElement('thead', null,
+                        React.createElement('tr', {
+                            className: 'bg-gray-50'
+                        },
+                            React.createElement('th', {
+                                className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-32'
+                            }, t('item')),
+                            
+                            React.createElement('th', {
+                                className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20'
+                            }, t('received')),
+                            React.createElement('th', {
+                                className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20'
+                            }, t('expired')),
+                            React.createElement('th', {
+                                className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20'
+                            }, t('remaining'))
+                        )
+                    ),
+                    React.createElement('tbody', null,
+                        items.map(item => 
+                            React.createElement('tr', {
+                                key: item.key,
+                                className: 'hover:bg-gray-50'
+                            },
+                                React.createElement('td', {
+                                    className: 'border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700'
+                                }, t(item.labelKey)),
+                               
+                                React.createElement('td', {
+                                    className: 'border border-gray-200 px-2 py-1'
+                                },
+                                    React.createElement('input', {
+                                        type: 'number',
+                                        step: unit === 'kg' ? '0.001' : '1',
+                                        value: formData[sectionKey][item.key + '_received'],
+                                        onChange: e => handleInputChange(sectionKey, item.key + '_received', e.target.value),
+                                        className: 'w-full p-1 border rounded text-xs' + (fieldsLocked ? ' bg-gray-100 opacity-50' : ''),
+                                        placeholder: '0',
+                                        disabled: fieldsLocked
+                                    })
+                                ),
+                                React.createElement('td', {
+                                    className: 'border border-gray-200 px-2 py-1'
+                                },
+                                    React.createElement('input', {
+                                        type: 'number',
+                                        step: unit === 'kg' ? '0.001' : '1',
+                                        value: formData[sectionKey][item.key + '_expired'],
+                                        onChange: e => handleInputChange(sectionKey, item.key + '_expired', e.target.value),
+                                        className: 'w-full p-1 border rounded text-xs' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                        placeholder: '0',
+                                        disabled: fieldsLocked
+                                    })
+                                ),
+                                React.createElement('td', {
+                                    className: 'border border-gray-200 px-2 py-1'
+                                },
+                                    React.createElement('input', {
+                                        type: 'number',
+                                        step: unit === 'kg' ? '0.001' : '1',
+                                        value: formData[sectionKey][item.key + '_remaining'],
+                                        onChange: e => handleInputChange(sectionKey, item.key + '_remaining', e.target.value),
+                                        className: 'w-full p-1 border rounded text-xs' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                        placeholder: '0',
+                                        required: true,
+                                        disabled: fieldsLocked
+                                    })
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        );
+    };
+    
+    return React.createElement('div', {
+        className: 'max-w-6xl mx-auto space-y-6'
+    },
+        React.createElement('div', {
+            className: 'bg-white rounded-lg shadow p-6'
+        },
+            React.createElement('h2', {
+                className: 'text-2xl font-bold text-gray-800 mb-6'
+            }, t('dailyOperationsEntry')),
+            
+            React.createElement('div', {
+                className: 'mb-6 p-4 bg-blue-50 rounded-lg'
+            },
+                React.createElement('div', {
+                    className: 'flex-wrap items-center gap-4'
+                },
+                    React.createElement('div', null,
+                        React.createElement('label', {
+                            className: 'block text-sm font-medium mb-1'
+                        }, t('selectDate')),
+                        React.createElement('input', {
+                            type: 'date',
+                            value: selectedDate,
+                            max: new Date().toISOString().split('T')[0],
+                            onChange: e => setSelectedDate(e.target.value),
+                            className: 'p-2 border rounded focus:ring-2 focus:ring-blue-500'
+                        })
+                    ),
+                    
+                    checkingExistingData && React.createElement('div', {
+                        className: 'flex items-center gap-2 text-gray-600'
+                    },
+                        React.createElement('div', {
+                            className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600'
+                        }),
+                        React.createElement('span', {
+                            className: 'text-sm'
+                        }, t('checkingForExistingData'))
+                    ),
+                    
+                    !checkingExistingData && React.createElement('div', {
+                        className: 'flex-1'
+                    },
+                        duplicateWarning && showLoadExistingPin && React.createElement('div', {
+                            className: 'bg-yellow-100 border border-yellow-400 rounded p-3'
+                        },
+                            React.createElement('div', {
+                                className: 'flex items-center gap-2 mb-3'
+                            },
+                                React.createElement('span', {
+                                    className: 'text-yellow-600'
+                                }, '⚠️'),
+                                React.createElement('div', {
+                                    className: 'flex-1'
+                                },
+                                    React.createElement('p', {
+                                        className: 'font-medium text-yellow-800'
+                                    }, t('entryExistsFor') + ' ' + selectedDate),
+                                    React.createElement('p', {
+                                        className: 'text-sm text-yellow-600'
+                                    }, t('enterManagementPinToLoad'))
+                                )
+                            ),
+                            
+                            React.createElement('div', {
+                                className: 'bg-blue-50 border border-blue-300 rounded-lg p-3'
+                            },
+                                React.createElement('h4', {
+                                    className: 'text-sm font-semibold text-blue-800 mb-2'
+                                }, '🔐 ' + t('managementPin')),
+                                
+                                loadingExistingData ? React.createElement('div', {
+                                    className: 'flex items-center gap-2 text-blue-600'
+                                },
+                                    React.createElement('div', {
+                                        className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600'
+                                    }),
+                                    React.createElement('span', {
+                                        className: 'text-sm'
+                                    }, t('loadingData'))
+                                ) : React.createElement('div', null,
+                                    React.createElement('div', {
+                                        className: 'flex flex-wrap gap-2 w-full sm:flex-nowrap'
+                                    },
+                                        React.createElement('input', {
+                                            type: 'password',
+                                            value: loadExistingPin,
+                                            onChange: e => {
+                                                setLoadExistingPin(e.target.value);
+                                                if (pinError) {
+                                                    setPinError(false);
+                                                }
+                                            },
+                                            onKeyPress: e => {
+                                                if (e.key === 'Enter' && loadExistingPin.trim()) {
+                                                    confirmLoadExistingData();
+                                                }
+                                            },
+                                            className: 'flex-1 min-w-0 p-2 border rounded text-sm w-full sm:w-auto',
+                                            placeholder: t('enterPin')
+                                        }),
+                                        React.createElement('button', {
+                                            type: 'button',
+                                            onClick: confirmLoadExistingData,
+                                            disabled: !loadExistingPin,
+                                            className: 'bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50 w-full sm:w-auto'
+                                        }, t('unlock'))
+                                    ),
+                                    
+                                    pinError && React.createElement('div', {
+                                        className: 'mt-2'
+                                    },
+                                        React.createElement('p', {
+                                            className: 'text-xs text-red-600'
+                                        }, t('incorrectPin'))
+                                    )
+                                )
+                            )
+                        ),
+                        
+                        !duplicateWarning && selectedDate !== new Date().toISOString().split('T')[0] && React.createElement('div', {
+                            className: 'bg-green-100 border border-green-400 rounded p-3'
+                        },
+                            React.createElement('div', {
+                                className: 'flex items-center gap-2'
+                            },
+                                React.createElement('span', {
+                                    className: 'text-green-600'
+                                }, '✅'),
+                                React.createElement('p', {
+                                    className: 'text-green-800 text-sm'
+                                }, t('dataLoadedFor') + ' ' + selectedDate + ' - ' + t('formReadyForEditing'))
+                            )
+                        ),
+                        
+                        !duplicateWarning && selectedDate === new Date().toISOString().split('T')[0] && React.createElement('div', {
+                            className: 'bg-blue-100 border border-blue-400 rounded p-3'
+                        },
+                            React.createElement('div', {
+                                className: 'flex items-center gap-2'
+                            },
+                                React.createElement('span', {
+                                    className: 'text-blue-600'
+                                }, '📝'),
+                                React.createElement('p', {
+                                    className: 'text-blue-800 text-sm'
+                                }, t('readyForNewEntry') + ' - ' + selectedDate)
+                            )
+                        )
+                    )
+                )
+            ),
+            
+            React.createElement('form', {
+                onSubmit: handleSubmit,
+                className: 'space-y-8'
+            },
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '🥙 ' + t('shawarmaStackManagement')),
+                    
+                    React.createElement('div', {
+                        className: 'grid grid-cols-2 md:grid-cols-5 gap-4'
+                    },
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('startingWeight')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.001',
+                                value: formData.shawarmaStack.starting_weight,
+                                onChange: e => handleInputChange('shawarmaStack', 'starting_weight', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                required: true,
+                                disabled: fieldsLocked
+                            })
+                        ),
+                        
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('ordersWeight')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.001',
+                                value: formData.shawarmaStack.orders_weight,
+                                onChange: e => handleInputChange('shawarmaStack', 'orders_weight', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                disabled: fieldsLocked
+                            })
+                        ),
+                        
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('shavingWeight')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.001',
+                                value: formData.shawarmaStack.shaving_weight,
+                                onChange: e => handleInputChange('shawarmaStack', 'shaving_weight', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                disabled: fieldsLocked
+                            })
+                        ),
+                        
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('staffMeals')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.001',
+                                value: formData.shawarmaStack.staff_meals_weight,
+                                onChange: e => handleInputChange('shawarmaStack', 'staff_meals_weight', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                disabled: fieldsLocked
+                            })
+                        ),
+                        
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('remainingWeight')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.001',
+                                value: formData.shawarmaStack.remaining_weight,
+                                onChange: e => handleInputChange('shawarmaStack', 'remaining_weight', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                required: true,
+                                disabled: fieldsLocked
+                            })
+                        )
+                    )
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '🥩 ' + t('rawProteins')),
+                    
+                    renderInventorySection('frozenRawProteins', 'rawProteins', [
+                        {key: 'frozen_chicken_breast', labelKey: 'frozenChickenBreast'},
+                        {key: 'chicken_shawarma', labelKey: 'chickenShawarma'},
+                        {key: 'steak', labelKey: 'steak'}
+                    ], 'kg')
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '🍖 ' + t('marinatedReadyToUse')),
+                    
+                    renderInventorySection('marinatedProteins', 'marinatedProteins', [
+                        {key: 'fahita_chicken', labelKey: 'fahitaChicken'},
+                        {key: 'chicken_sub', labelKey: 'chickenSub'},
+                        {key: 'spicy_strips', labelKey: 'spicyStrips'},
+                         {key: 'original_strips', labelKey: 'originalStrips'},
+    // ADD THIS LINE:
+    {key: 'marinated_steak', labelKey: 'marinatedSteak'}
+], 'kg')
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '🍞 ' + t('dailyBreadTracking')),
+                    
+                    renderInventorySection('breadItems', 'bread', [
+                        {key: 'saj_bread', labelKey: 'sajBread'},
+                        {key: 'pita_bread', labelKey: 'pitaBread'},
+                        {key: 'bread_rolls', labelKey: 'breadRolls'}
+                    ], 'pieces')
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '💰 ' + t('highCostItems')),
+                    
+                    renderInventorySection('highCostItems', 'highCostItems', [
+                        {key: 'cream', labelKey: 'cream'},
+                        {key: 'mayo', labelKey: 'mayo'}
+                    ], 'kg')
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '💵 ' + t('dailySales')),
+                    
+                    React.createElement('div', {
+                        className: 'grid grid-cols-1 md:grid-cols-2 gap-4'
+                    },
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('totalDailyRevenue')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.01',
+                                value: formData.sales.total_revenue,
+                                onChange: e => handleInputChange('sales', 'total_revenue', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                required: true,
+                                disabled: fieldsLocked
+                            })
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium mb-1'
+                            }, t('shawarmaRevenue')),
+                            React.createElement('input', {
+                                type: 'number',
+                                step: '0.01',
+                                value: formData.sales.shawarma_revenue,
+                                onChange: e => handleInputChange('sales', 'shawarma_revenue', e.target.value),
+                                className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                required: true,
+                                disabled: fieldsLocked
+                            })
+                        )
+                    )
+                ),
+                
+                React.createElement('div', {
+                    className: 'border border-gray-200 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                    }, '📝 ' + t('dailyNotes')),
+                    React.createElement('textarea', {
+                        value: formData.notes,
+                        onChange: e => setFormData(prev => ({ ...prev, notes: e.target.value })),
+                        className: 'w-full p-3 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                        rows: '3',
+                        placeholder: t('anyObservations'),
+                        disabled: fieldsLocked
+                    })
+                ),
+                
+                showPinInput && React.createElement('div', {
+                    className: 'border border-yellow-400 bg-yellow-50 rounded-lg p-6'
+                },
+                    React.createElement('h3', {
+                        className: 'text-lg font-semibold text-yellow-800 mb-4'
+                    }, '🔐 ' + t('managementAuthRequired')),
+                    React.createElement('div', {
+                        className: 'max-w-md'
+                    },
+                        React.createElement('label', {
+                            className: 'block text-sm font-medium mb-1'
+                        }, t('enterManagementPin')),
+                        React.createElement('input', {
+                            type: 'password',
+                            value: managementPin,
+                            onChange: e => setManagementPin(e.target.value),
+                            className: 'w-full p-3 border rounded focus:ring-2 focus:ring-yellow-500',
+                            placeholder: t('enterPin'),
+                            maxLength: '20'
+                        }),
+                        React.createElement('p', {
+                            className: 'text-sm text-yellow-600 mt-2'
+                        }, t('pinToUpdateEntry') + ' ' + selectedDate)
+                    )
+                ),
+                
+                React.createElement('div', {
+                    className: 'flex justify-end space-x-4'
+                },
+                    showPinInput && React.createElement('button', {
+                        type: 'button',
+                        onClick: cancelUpdate,
+                        className: 'bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600'
+                    }, t('cancelUpdate')),
+                    React.createElement('button', {
+                        type: 'submit',
+                        disabled: loading || fieldsLocked || (showPinInput && !managementPin),
+                        className: 'bg-redbrand-600 text-white px-8 py-3 rounded-lg hover:bg-redbrand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2'
+                    },
+                        loading ? React.createElement(React.Fragment, null,
+                            React.createElement('div', {
+                                className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-white'
+                            }),
+                            isUpdateMode ? t('updating') : t('saving')
+                        ) : React.createElement(React.Fragment, null,
+                            fieldsLocked ? t('loadDataFirst') : (isUpdateMode ? t('updateEntry') : t('saveEntry')),
+                            showPinInput && !managementPin && ' ' + t('pinRequired')
+                        )
+                    )
+                )
+            )
+        )
+    );
+}
+
+// Make the component available globally
+window.EmployeeDailyEntryTab = BilingualEmployeeDailyEntryTab;
+</script>

@@ -1,0 +1,413 @@
+<script type="text/babel">
+function BilingualEmployeeWeeklyEntryTab({ employeeSession }) {
+    const { t } = React.useContext(window.LanguageContext);
+
+    // Define weekly inventory structure so we can easily add items later
+    const inventorySections = [
+        {
+            categoryKey: 'dairyProducts',
+            items: [
+                { key: 'mozzarella', labelKey: 'mozzarella', name: 'Mozzarella', unit: 'kg' },
+                { key: 'cheddar', labelKey: 'cheddar', name: 'Cheddar', unit: 'kg' }
+            ]
+        },
+        {
+            categoryKey: 'freshVegetables',
+            items: [
+                { key: 'lettuce', labelKey: 'lettuce', name: 'Lettuce', unit: 'kg' },
+                { key: 'coleslaw', labelKey: 'coleslaw', name: 'Coleslaw', unit: 'kg' },
+                { key: 'corn', labelKey: 'corn', name: 'Corn', unit: 'kg' },
+                { key: 'pickles', labelKey: 'pickles', name: 'Pickles', unit: 'kg' },
+                { key: 'peppers', labelKey: 'peppers', name: 'Peppers', unit: 'kg' },
+                { key: 'onion', labelKey: 'onion', name: 'Onion', unit: 'kg' },
+                { key: 'mushroom', labelKey: 'mushroom', name: 'Mushroom', unit: 'kg' }
+            ]
+        },
+        {
+            categoryKey: 'saucesCondiments',
+            items: [
+                { key: 'garlic_sauce', labelKey: 'garlicSauce', name: 'Garlic Sauce', unit: 'kg' },
+                { key: 'other_sauces', labelKey: 'otherSauces', name: 'Other Sauces', unit: 'kg' }
+            ]
+        },
+        {
+            categoryKey: 'frozenItems',
+            items: [
+                { key: 'fries_premium', labelKey: 'friesPremium', name: 'Fries Premium', unit: 'kg' },
+                { key: 'fries_regular', labelKey: 'friesRegular', name: 'Fries Regular', unit: 'kg' }
+            ]
+        },
+        {
+            categoryKey: 'beverages',
+            items: [
+                { key: 'soft_drinks', labelKey: 'softDrinks', name: 'Soft Drinks', unit: 'pieces' },
+                { key: 'water_bottles', labelKey: 'waterBottles', name: 'Water Bottles', unit: 'pieces' }
+            ]
+        },
+        {
+            categoryKey: 'cookingOils',
+            items: [
+                { key: 'fries_cooking_oil', labelKey: 'friesCookingOil', name: 'Fries Cooking Oil', unit: 'liters' },
+                { key: 'strips_cooking_oil', labelKey: 'stripsCookingOil', name: 'Strips Cooking Oil', unit: 'liters' }
+            ]
+        },
+        {
+            categoryKey: 'additionalProteins',
+            items: [
+                { key: 'turkey', labelKey: 'turkey', name: 'Turkey', unit: 'kg' }
+            ]
+        }
+    ];
+
+    const weekStartDay = 4; // Thursday
+
+    const getWeekStart = (date) => {
+        const d = new Date(date);
+        const diff = (d.getDay() >= weekStartDay ? d.getDay() - weekStartDay : 7 - (weekStartDay - d.getDay()));
+        d.setDate(d.getDate() - diff);
+        return d.toISOString().split('T')[0];
+    };
+
+    // Build default form state
+    const buildDefaultState = () => {
+        const inv = {};
+        inventorySections.forEach(section => {
+            section.items.forEach(item => {
+                inv[item.key + '_opening'] = '';
+                inv[item.key + '_received'] = '';
+                inv[item.key + '_expired'] = '';
+                inv[item.key + '_remaining'] = '';
+            });
+        });
+        return { inventory: inv, notes: '' };
+    };
+
+    const [formData, setFormData] = React.useState(buildDefaultState());
+    const [selectedDate, setSelectedDate] = React.useState(getWeekStart(new Date()));
+    const [duplicateWarning, setDuplicateWarning] = React.useState(false);
+    const [checkingExistingData, setCheckingExistingData] = React.useState(false);
+    const [isUpdateMode, setIsUpdateMode] = React.useState(false);
+    const [fieldsLocked, setFieldsLocked] = React.useState(false);
+    const [showLoadExistingPin, setShowLoadExistingPin] = React.useState(false);
+    const [loadExistingPin, setLoadExistingPin] = React.useState('');
+    const [pinError, setPinError] = React.useState(false);
+    const [managementPin, setManagementPin] = React.useState('');
+    const [loadingExistingData, setLoadingExistingData] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
+
+    React.useEffect(() => {
+        if (selectedDate) {
+            checkExistingEntry();
+        }
+    }, [selectedDate]);
+
+    React.useEffect(() => {
+        if (!checkingExistingData && !duplicateWarning && selectedDate) {
+            loadPreviousWeekData();
+        }
+    }, [checkingExistingData, duplicateWarning, selectedDate]);
+
+    const resetForm = () => {
+        setFormData(buildDefaultState());
+        setIsUpdateMode(false);
+        setFieldsLocked(false);
+        setDuplicateWarning(false);
+        setShowLoadExistingPin(false);
+        setLoadExistingPin('');
+        setManagementPin('');
+        setPinError(false);
+    };
+
+    const handleInputChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            inventory: { ...prev.inventory, [field]: value }
+        }));
+    };
+
+    const checkExistingEntry = async () => {
+        setCheckingExistingData(true);
+        setDuplicateWarning(false);
+        setFieldsLocked(true);
+        setShowLoadExistingPin(false);
+        setPinError(false);
+        setLoadExistingPin('');
+
+        try {
+            await google.script.run
+                .withSuccessHandler(result => {
+                    const data = JSON.parse(result);
+                    setCheckingExistingData(false);
+
+                    if (data.exists) {
+                        setDuplicateWarning(true);
+                        setFieldsLocked(true);
+                        setShowLoadExistingPin(true);
+                    } else {
+                        resetForm();
+                    }
+                })
+                .withFailureHandler(() => {
+                    setCheckingExistingData(false);
+                    resetForm();
+                })
+                .checkExistingWeeklyEntry(selectedDate);
+        } catch (error) {
+            setCheckingExistingData(false);
+            resetForm();
+        }
+    };
+
+    const loadPreviousWeekData = async () => {
+        try {
+            const prevDate = new Date(selectedDate);
+            prevDate.setDate(prevDate.getDate() - 7);
+            const prevWeekStart = getWeekStart(prevDate);
+            await google.script.run
+                .withSuccessHandler(result => {
+                    const data = JSON.parse(result);
+                    if (data && data.dataFound) {
+                        setFormData(prev => {
+                            const inv = { ...prev.inventory };
+                            Object.entries(data.items).forEach(([key, val]) => {
+                                inv[key + '_opening'] = String(val.remaining_quantity || '');
+                            });
+                            return { ...prev, inventory: inv };
+                        });
+                    }
+                })
+                .withFailureHandler(() => {})
+                .generateWeeklyReport(prevWeekStart);
+        } catch (error) {}
+    };
+
+    const confirmLoadExistingData = async () => {
+        if (!loadExistingPin || loadExistingPin.trim() === '') return;
+
+        setLoadingExistingData(true);
+        setPinError(false);
+
+        try {
+            await google.script.run
+                .withSuccessHandler(isValid => {
+                    if (!isValid) {
+                        setLoadingExistingData(false);
+                        setPinError(true);
+                        return;
+                    }
+
+                    google.script.run
+                        .withSuccessHandler(dataResult => {
+                            const data = JSON.parse(dataResult);
+                            if (data && data.dataFound) {
+                                const inv = buildDefaultState().inventory;
+                                Object.entries(data.items).forEach(([key, val]) => {
+                                    inv[key + '_opening'] = String(val.opening_quantity || '');
+                                    inv[key + '_received'] = String(val.received_quantity || '');
+                                    inv[key + '_expired'] = String(val.expired_quantity || '');
+                                    inv[key + '_remaining'] = String(val.remaining_quantity || '');
+                                });
+                                setFormData({ inventory: inv, notes: data.notes || '' });
+                                setIsUpdateMode(true);
+                                setFieldsLocked(false);
+                                setShowLoadExistingPin(false);
+                            }
+                            setLoadingExistingData(false);
+                        })
+                        .withFailureHandler(() => {
+                            setLoadingExistingData(false);
+                        })
+                        .generateWeeklyReport(selectedDate);
+                })
+                .withFailureHandler(() => {
+                    setPinError(true);
+                    setLoadingExistingData(false);
+                })
+                .validateManagementPin(loadExistingPin);
+        } catch (error) {
+            setLoadingExistingData(false);
+            setPinError(true);
+        }
+    };
+
+    const submitForm = async () => {
+        const weekStart = selectedDate;
+        const weekEnd = new Date(selectedDate);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+
+        const items = [];
+        inventorySections.forEach(section => {
+            section.items.forEach(item => {
+                items.push({
+                    name: item.name,
+                    category: t(section.categoryKey),
+                    unit: item.unit,
+                    key: item.key,
+                    opening: formData.inventory[item.key + '_opening'],
+                    received: formData.inventory[item.key + '_received'],
+                    expired: formData.inventory[item.key + '_expired'],
+                    remaining: formData.inventory[item.key + '_remaining']
+                });
+            });
+        });
+
+        const entryData = {
+            weekStartDate: weekStart,
+            weekEndDate: weekEnd.toISOString().split('T')[0],
+            items: items,
+            notes: formData.notes,
+            isUpdate: isUpdateMode,
+            managementPin: isUpdateMode ? managementPin : null,
+            employeeId: employeeSession.employeeId
+        };
+
+        setLoading(true);
+        try {
+            await google.script.run
+                .withSuccessHandler(result => {
+                    const response = JSON.parse(result);
+                    alert(response.message);
+                    if (response.success) {
+                        resetForm();
+                        setSelectedDate(getWeekStart(new Date()));
+                    }
+                    setLoading(false);
+                })
+                .withFailureHandler(error => {
+                    alert('Error saving entry: ' + error.message);
+                    setLoading(false);
+                })
+                .saveWeeklyEntry(entryData);
+        } catch (error) {
+            alert('Error submitting form: ' + error.message);
+            setLoading(false);
+        }
+    };
+
+    const renderInventorySection = (titleKey, items) => {
+        return React.createElement('div', { className: 'mb-6' },
+            React.createElement('h4', { className: 'font-medium text-gray-700 mb-3' }, t(titleKey)),
+            React.createElement('div', { className: 'overflow-x-auto' },
+                React.createElement('table', { className: 'min-w-full border-collapse' },
+                    React.createElement('thead', null,
+                        React.createElement('tr', { className: 'bg-gray-50' },
+                            React.createElement('th', { className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-32' }, t('item')),
+                            React.createElement('th', { className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20' }, t('received')),
+                            React.createElement('th', { className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20' }, t('expired')),
+                            React.createElement('th', { className: 'border border-gray-200 px-3 py-2 text-left text-xs font-medium text-gray-600 w-20' }, t('remaining'))
+                        )
+                    ),
+                    React.createElement('tbody', null,
+                        items.map(item =>
+                            React.createElement('tr', { key: item.key, className: 'hover:bg-gray-50' },
+                                React.createElement('td', { className: 'border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700' }, t(item.labelKey)),
+                                ['received','expired','remaining'].map(field =>
+                                    React.createElement('td', { className: 'border border-gray-200 px-2 py-1', key: field },
+                                        React.createElement('input', {
+                                            type: 'number',
+                                            step: item.unit === 'kg' ? '0.001' : '1',
+                                            value: formData.inventory[item.key + '_' + field],
+                                            onChange: e => handleInputChange(item.key + '_' + field, e.target.value),
+                                            className: 'w-full p-1 border rounded text-xs' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                            placeholder: '0',
+                                            disabled: fieldsLocked
+                                        })
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        );
+    };
+
+    return React.createElement('div', { className: 'max-w-4xl mx-auto space-y-6' },
+        React.createElement('div', { className: 'bg-white rounded-lg shadow p-6' },
+            React.createElement('h2', { className: 'text-2xl font-bold text-gray-800 mb-6' }, t('weeklyInventoryCounts')),
+            React.createElement('div', { className: 'mb-6 p-4 bg-blue-50 rounded-lg' },
+                React.createElement('div', { className: 'flex-wrap items-center gap-4' },
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block text-sm font-medium mb-1' }, t('weekStart')),
+                        React.createElement('input', {
+                            type: 'date',
+                            step: 7,
+                            value: selectedDate,
+                            onChange: e => setSelectedDate(getWeekStart(e.target.value)),
+                            className: 'p-2 border rounded focus:ring-2 focus:ring-blue-500'
+                        })
+                    ),
+                    checkingExistingData && React.createElement('div', { className: 'flex items-center gap-2 text-gray-600' },
+                        React.createElement('div', { className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600' }),
+                        React.createElement('span', { className: 'text-sm' }, t('checkingForExistingData'))
+                    ),
+                    !checkingExistingData && React.createElement('div', { className: 'flex-1' },
+                        duplicateWarning && showLoadExistingPin && React.createElement('div', { className: 'bg-yellow-100 border border-yellow-400 rounded p-3' },
+                            React.createElement('div', { className: 'flex items-center gap-2 mb-3' },
+                                React.createElement('span', { className: 'text-yellow-600' }, '⚠️'),
+                                React.createElement('div', { className: 'flex-1' },
+                                    React.createElement('p', { className: 'font-medium text-yellow-800' }, t('entryExistsFor') + ' ' + selectedDate),
+                                    React.createElement('p', { className: 'text-sm text-yellow-600' }, t('enterManagementPinToLoad'))
+                                )
+                            ),
+                            React.createElement('div', { className: 'bg-blue-50 border border-blue-300 rounded-lg p-3' },
+                                React.createElement('h4', { className: 'text-sm font-semibold text-blue-800 mb-2' }, '🔐 ' + t('managementPin')),
+                                loadingExistingData ? React.createElement('div', { className: 'flex items-center gap-2 text-blue-600' },
+                                    React.createElement('div', { className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600' }),
+                                    React.createElement('span', { className: 'text-sm' }, t('loadingData'))
+                                ) : React.createElement('div', null,
+                                    React.createElement('div', { className: 'flex flex-wrap gap-2 w-full sm:flex-nowrap' },
+                                        React.createElement('input', {
+                                            type: 'password',
+                                            value: loadExistingPin,
+                                            onChange: e => { setLoadExistingPin(e.target.value); if (pinError) setPinError(false); },
+                                            onKeyPress: e => { if (e.key === 'Enter' && loadExistingPin.trim()) { confirmLoadExistingData(); } },
+                                            className: 'flex-1 min-w-0 p-2 border rounded text-sm w-full sm:w-auto',
+                                            placeholder: t('enterPin')
+                                        }),
+                                        React.createElement('button', { type: 'button', onClick: confirmLoadExistingData, disabled: !loadExistingPin, className: 'bg-blue-600 text-white px-3 py-2 rounded text-sm disabled:opacity-50 w-full sm:w-auto' }, t('unlock'))
+                                    ),
+                                    pinError && React.createElement('div', { className: 'mt-2' },
+                                        React.createElement('p', { className: 'text-xs text-red-600' }, t('incorrectPin'))
+                                    )
+                                )
+                            )
+                        ),
+                        !duplicateWarning && React.createElement('div', { className: 'bg-blue-100 border border-blue-400 rounded p-3' },
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('span', { className: 'text-blue-600' }, '📝'),
+                                React.createElement('p', { className: 'text-blue-800 text-sm' }, t('readyForNewEntry') + ' - ' + selectedDate)
+                            )
+                        )
+                    )
+                )
+            ),
+            inventorySections.map(sec => renderInventorySection(sec.categoryKey, sec.items)),
+            React.createElement('div', { className: 'mb-6' },
+                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, t('weeklyNotes')),
+                React.createElement('textarea', {
+                    value: formData.notes,
+                    onChange: e => setFormData(prev => ({ ...prev, notes: e.target.value })),
+                    className: 'w-full p-2 border rounded',
+                    rows: 3,
+                    disabled: fieldsLocked
+                })
+            ),
+            React.createElement('div', { className: 'flex justify-end gap-2' },
+                isUpdateMode && React.createElement('input', {
+                    type: 'password',
+                    value: managementPin,
+                    onChange: e => setManagementPin(e.target.value),
+                    className: 'p-2 border rounded text-sm',
+                    placeholder: t('managementPin') + ' ' + t('pinRequired')
+                }),
+                React.createElement('button', { type: 'button', onClick: submitForm, disabled: loading, className: 'bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50' },
+                    loading ? (isUpdateMode ? t('updating') : t('saving')) : (isUpdateMode ? t('updateWeeklyEntry') : t('saveWeeklyEntry'))
+                )
+            )
+        )
+    );
+}
+
+window.EmployeeWeeklyEntryTab = BilingualEmployeeWeeklyEntryTab;
+</script>

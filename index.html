@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Restaurant Management System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    redbrand: {
+                        50:  '#fef2f2', 100: '#fde8e8', 200: '#fbd5d5', 300: '#f8b4b4',
+                        400: '#f98080', 500: '#f05252', 600: '#e02424', 700: '#c81e1e',
+                        800: '#9b1c1c', 900: '#771d1d',
+                    },
+                    olive: {
+                        50: '#f7f8f0', 100: '#eef0dc', 200: '#dde2bd', 300: '#c6ce94',
+                        400: '#b0ba70', 500: '#9ca653', 600: '#84a35a', 700: '#6a7c47',
+                        800: '#56653c', 900: '#4a5735',
+                    }
+                }
+            }
+        }
+    }
+    </script>
+    
+    <style>
+        /* Mobile-specific fixes */
+        @media (max-width: 768px) {
+            * { -webkit-tap-highlight-color: transparent; }
+            input[type="number"] { -webkit-appearance: none; -moz-appearance: textfield; appearance: none; }
+            input[type="number"]::-webkit-outer-spin-button,
+            input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+            input, select, textarea { font-size: 16px !important; }
+            button, input, select { touch-action: manipulation; }
+        }
+        input[inputmode="numeric"] { font-variant-numeric: tabular-nums; }
+    </style>
+    
+    <!-- React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel 6 for JSX transpilation -->
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+<body>
+    <div id="loading" class="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-redbrand-50 to-redbrand-100">
+        <div class="animate-spin rounded-full h-16 w-16 border-b-2 border-redbrand-600 mb-4"></div>
+        <div class="text-redbrand-600 text-lg">Initializing Restaurant System...</div>
+    </div>
+
+    <div id="root" style="display:none;"></div>
+
+    <script type="text/babel">
+        console.log("Starting unified restaurant app...");
+        
+        // Language translations (from employee app - keeping exact structure)
+       const translations = {
+    en: {
+        // Authentication (Updated - more generic)
+        appTitle: "Restaurant Management System",
+        employeeAppTitle: "Restaurant Employee App", // Keep original for employee interface
+        enterPinToAccess: "Enter your PIN to access the system",
+        employeePin: "Employee PIN",
+        enterPin: "Enter PIN",
+        login: "Login",
+        authenticating: "Authenticating...",
+        contactSupervisor: "Contact your supervisor if you need PIN assistance",
+        invalidPin: "Invalid PIN",
+        authenticationFailed: "Authentication failed. Please try again.",
+        connectionError: "Connection error. Please try again.",
+        validPinRequired: "Please enter a valid PIN (minimum 4 digits)",
+        
+        // Navigation - Employee
+        dailyEntry: "Daily Entry",
+        weeklyCounts: "Weekly Counts",
+        hello: "Hello",
+        logout: "Logout",
+        
+        // Navigation - Management (New)
+        dashboard: "Dashboard",
+        management: "Management",
+        orders: "Orders",
+        menu: "Menu",
+        ingredients: "Ingredients",
+        inventory: "Inventory",
+        suppliers: "Suppliers",
+        employees: "Staff",
+        reports: "Reports",
+        
+        // Common
+        language: "Language",
+        english: "English",
+        arabic: "العربية",
+        
+        // Main App Titles
+        restaurantEmployeeApp: "Restaurant Employee App",
+        restaurantManagement: "Restaurant Management System", // New
+        dailyOperationsAndInventory: "Daily operations and inventory tracking",
+        completeOperationsControl: "Complete restaurant operations control", // New
+        loadingEmployeeApp: "Loading employee app...",
+        
+        // Daily Entry Tab
+        dailyOperationsEntry: "Daily Operations Entry",
+        selectDate: "Select Date",
+        checkingForExistingData: "Checking for existing data...",
+        entryExistsFor: "Entry exists for",
+        enterManagementPinToLoad: "Enter management PIN to load data",
+        managementPin: "Management PIN",
+        loadingData: "Loading data...",
+        unlock: "Unlock",
+        incorrectPin: "Incorrect PIN. Please try again.",
+        dataLoadedFor: "Data loaded for",
+        formReadyForEditing: "Form ready for editing",
+        readyForNewEntry: "Ready for new entry",
+        
+        // Shawarma Section
+        shawarmaStackManagement: "Shawarma Stack Management",
+        startingWeight: "Starting Weight (kg)",
+        ordersWeight: "Orders Weight (kg)",
+        shavingWeight: "Shaving Weight (kg)",
+        staffMeals: "Staff Meals (kg)",
+        remainingWeight: "Remaining Weight (kg)",
+        
+        // Inventory Sections
+        rawProteins: "Raw Proteins",
+        frozenRawProteins: "Frozen Raw Proteins",
+        frozenChickenBreast: "Frozen Chicken Breast",
+        chickenShawarma: "Chicken Shawarma",
+        steak: "Steak",
+        
+        marinatedReadyToUse: "Marinated Ready-to-Use",
+        marinatedProteins: "Marinated Proteins",
+        fahitaChicken: "Fahita Chicken",
+        chickenSub: "Chicken Sub",
+        spicyStrips: "Spicy Strips",
+        originalStrips: "Original Strips",
+        marinatedSteak: "Marinated Steak",
+        
+        dailyBreadTracking: "Daily Bread Tracking",
+        breadItems: "Bread Items",
+        sajBread: "Saj Bread",
+        pitaBread: "Pita Bread",
+        breadRolls: "Bread Rolls",
+        
+        highCostItems: "High-Cost Items",
+        cream: "Cream",
+        mayo: "Mayo",
+        
+        // Table Headers
+        item: "Item",
+        opening: "Opening",
+        received: "Received",
+        expired: "Expired",
+        remaining: "Remaining",
+        
+        // Sales Section
+        dailySales: "Daily Sales",
+        totalDailyRevenue: "Total Daily Revenue (QAR)",
+        shawarmaRevenue: "Shawarma Revenue (QAR)",
+        
+        // Notes Section
+        dailyNotes: "Daily Notes",
+        anyObservations: "Any observations or comments about today's operations...",
+        
+        // Management Authorization
+        managementAuthRequired: "Management Authorization Required",
+        enterManagementPin: "Enter Management PIN",
+        pinRequiredToUpdate: "PIN required to update existing entry",
+        pinToUpdateEntry: "PIN required to update entry for",
+        
+        // Buttons
+        cancelUpdate: "Cancel Update",
+        loadDataFirst: "Load Data First",
+        updateEntry: "Update Entry",
+        saveEntry: "Save Daily Entry",
+        saveWeeklyEntry: "Save Weekly Entry",
+        updateWeeklyEntry: "Update Weekly Entry",
+        updating: "Updating...",
+        saving: "Saving...",
+        pinRequired: "(PIN Required)",
+        
+        // Weekly Counts
+        weeklyInventoryCounts: "Weekly Inventory Counts",
+        weeklyInventorySystem: "Weekly inventory counting system coming soon...",
+        weekStart: "Week Start Date",
+        weeklyNotes: "Weekly Notes",
+        dairyProducts: "Dairy Products",
+        mozzarella: "Mozzarella",
+        cheddar: "Cheddar",
+        freshVegetables: "Fresh Vegetables",
+        lettuce: "Lettuce",
+        coleslaw: "Coleslaw",
+        corn: "Corn",
+        pickles: "Pickles",
+        peppers: "Peppers",
+        onion: "Onion",
+        mushroom: "Mushroom",
+        saucesCondiments: "Sauces & Condiments",
+        garlicSauce: "Garlic Sauce",
+        otherSauces: "Other Sauces",
+        frozenItems: "Frozen Items",
+        friesPremium: "Fries Premium",
+        friesRegular: "Fries Regular",
+        beverages: "Beverages",
+        softDrinks: "Soft Drinks",
+        waterBottles: "Water Bottles",
+        cookingOils: "Cooking Oils",
+        friesCookingOil: "Fries Cooking Oil",
+        stripsCookingOil: "Strips Cooking Oil",
+        additionalProteins: "Additional Proteins",
+        turkey: "Turkey",
+        
+        // Roles (New)
+        roleEmployee: "Employee",
+        roleManager: "Manager", 
+        roleSupervisor: "Supervisor",
+        roleAdmin: "Administrator"
+    },
+    ar: {
+        // Authentication (Updated - more generic)
+        appTitle: "نظام إدارة المطعم",
+        employeeAppTitle: "تطبيق موظفي المطعم", // Keep original for employee interface
+        enterPinToAccess: "أدخل رقمك السري للوصول إلى النظام",
+        employeePin: "رقم الموظف السري",
+        enterPin: "أدخل الرقم السري",
+        login: "تسجيل الدخول",
+        authenticating: "جاري التحقق...",
+        contactSupervisor: "اتصل بالمشرف إذا كنت بحاجة لمساعدة الرقم السري",
+        invalidPin: "رقم سري غير صحيح",
+        authenticationFailed: "فشل في التحقق. يرجى المحاولة مرة أخرى.",
+        connectionError: "خطأ في الاتصال. يرجى المحاولة مرة أخرى.",
+        validPinRequired: "يرجى إدخال رقم سري صحيح (4 أرقام على الأقل)",
+        
+        // Navigation - Employee
+        dailyEntry: "الإدخال اليومي",
+        weeklyCounts: "الجرد الأسبوعي",
+        hello: "مرحباً",
+        logout: "تسجيل الخروج",
+        
+        // Navigation - Management (New)
+        dashboard: "لوحة التحكم",
+        management: "الإدارة", 
+        orders: "الطلبات",
+        menu: "القائمة",
+        ingredients: "المكونات",
+        inventory: "المخزون",
+        suppliers: "الموردين",
+        employees: "الموظفين",
+        reports: "التقارير",
+        
+        // Common
+        language: "اللغة",
+        english: "English",
+        arabic: "العربية",
+        
+        // Main App Titles
+        restaurantEmployeeApp: "تطبيق موظفي المطعم",
+        restaurantManagement: "نظام إدارة المطعم", // New
+        dailyOperationsAndInventory: "تتبع العمليات اليومية والمخزون",
+        completeOperationsControl: "تحكم كامل في عمليات المطعم", // New
+        loadingEmployeeApp: "جاري تحميل تطبيق الموظفين...",
+        
+        // Daily Entry Tab
+        dailyOperationsEntry: "إدخال العمليات اليومية",
+        selectDate: "اختر التاريخ",
+        checkingForExistingData: "جاري فحص البيانات الموجودة...",
+        entryExistsFor: "يوجد إدخال لتاريخ",
+        enterManagementPinToLoad: "أدخل رقم الإدارة السري لتحميل البيانات",
+        managementPin: "رقم الإدارة السري",
+        loadingData: "جاري تحميل البيانات...",
+        unlock: "فتح",
+        incorrectPin: "رقم سري غير صحيح. يرجى المحاولة مرة أخرى.",
+        dataLoadedFor: "تم تحميل البيانات لتاريخ",
+        formReadyForEditing: "النموذج جاهز للتعديل",
+        readyForNewEntry: "جاهز لإدخال جديد",
+        
+        // Shawarma Section
+        shawarmaStackManagement: "إدارة سيخ الشاورما",
+        startingWeight: "وزن السيخ الابتدائي (كجم)",
+        ordersWeight: "وزن المباع مع التوزيع (كجم)",
+        shavingWeight: "وزن القشر (كجم)",
+        staffMeals: "وجبات الموظفين (كجم)",
+        remainingWeight: "الوزن المتبقي (كجم)",
+        
+        // Inventory Sections
+        rawProteins: "البروتينات الخام",
+        frozenRawProteins: "البروتينات الخام المجمدة",
+        frozenChickenBreast: "صدور الدجاج المجمدة",
+        chickenShawarma: "دجاج الشاورما المجمدة",
+        steak: "ستيك المجمدة",
+        
+        marinatedReadyToUse: "المتبل جاهز للاستخدام",
+        marinatedProteins: "البروتينات المتبلة",
+        fahitaChicken: "دجاج الفاهيتا",
+        chickenSub: "دجاج الساب",
+        spicyStrips: "الستربس الحار",
+        originalStrips: "الستربس العادي",
+        marinatedSteak: "ستيك متبل",
+        
+        dailyBreadTracking: "تتبع الخبز اليومي",
+        breadItems: "أصناف الخبز",
+        sajBread: "خبز الصاج",
+        pitaBread: "خبز لبناني",
+        breadRolls: "خبز سامونه",
+        
+        highCostItems: "أصناف عالية التكلفة",
+        cream: "كريمة",
+        mayo: "مايونيز",
+        
+        // Table Headers
+        item: "الصنف",
+        opening: "الافتتاحي",
+        received: "المستلم",
+        expired: "المنتهي الصلاحية",
+        remaining: "المتبقي",
+        
+        // Sales Section
+        dailySales: "المبيعات اليومية",
+        totalDailyRevenue: "إجمالي الإيرادات اليومية (ريال)",
+        shawarmaRevenue: "إيرادات الشاورما (ريال)",
+        
+        // Notes Section
+        dailyNotes: "ملاحظات يومية",
+        anyObservations: "أي ملاحظات أو تعليقات حول عمليات اليوم...",
+        
+        // Management Authorization
+        managementAuthRequired: "مطلوب تخويل الإدارة",
+        enterManagementPin: "أدخل رقم الإدارة السري",
+        pinRequiredToUpdate: "الرقم السري مطلوب لتحديث الإدخال الموجود",
+        pinToUpdateEntry: "الرقم السري مطلوب لتحديث إدخال تاريخ",
+        
+        // Buttons
+        cancelUpdate: "إلغاء التحديث",
+        loadDataFirst: "تحميل البيانات أولاً",
+        updateEntry: "تحديث الإدخال",
+        saveEntry: "حفظ الإدخال اليومي",
+        saveWeeklyEntry: "حفظ الإدخال الأسبوعي",
+        updateWeeklyEntry: "تحديث الإدخال الأسبوعي",
+        updating: "جاري التحديث...",
+        saving: "جاري الحفظ...",
+        pinRequired: "(الرقم السري مطلوب)",
+        
+        // Weekly Counts
+        weeklyInventoryCounts: "جرد المخزون الأسبوعي",
+        weeklyInventorySystem: "نظام الجرد الأسبوعي قريباً...",
+        weekStart: "تاريخ بداية الأسبوع",
+        weeklyNotes: "ملاحظات أسبوعية",
+        dairyProducts: "منتجات الألبان",
+        mozzarella: "موزاريلا",
+        cheddar: "شيدر",
+        freshVegetables: "خضروات طازجة",
+        lettuce: "خس",
+        coleslaw: "كول سلو",
+        corn: "ذرة",
+        pickles: "مخلل",
+        peppers: "فلفل",
+        onion: "بصل",
+        mushroom: "فطر",
+        saucesCondiments: "صلصات وتوابل",
+        garlicSauce: "صوص الثوم",
+        otherSauces: "صلصات أخرى",
+        frozenItems: "مجمدات",
+        friesPremium: "بطاطس مميزة",
+        friesRegular: "بطاطس عادية",
+        beverages: "مشروبات",
+        softDrinks: "مشروبات غازية",
+        waterBottles: "مياه معبأة",
+        cookingOils: "زيوت الطهي",
+        friesCookingOil: "زيت قلي البطاطس",
+        stripsCookingOil: "زيت قلي الستربس",
+        additionalProteins: "بروتينات إضافية",
+        turkey: "ديك رومي",
+        
+        // Roles (New)
+        roleEmployee: "موظف",
+        roleManager: "مدير",
+        roleSupervisor: "مشرف", 
+        roleAdmin: "مدير النظام"
+    }
+};
+        
+        // Create global contexts (exact from employee app)
+        window.LanguageContext = React.createContext();
+        window.AppContext = React.createContext();
+        
+        // Language Provider Component (exact from employee app)
+        function LanguageProvider({ children, initialLanguage = 'en' }) {
+            const [language, setLanguage] = React.useState(initialLanguage);
+            
+            const t = (key) => {
+                return translations[language][key] || key;
+            };
+            
+            const switchLanguage = async (newLanguage, employeeId) => {
+                setLanguage(newLanguage);
+                
+                document.documentElement.lang = newLanguage;
+                document.documentElement.dir = newLanguage === 'ar' ? 'rtl' : 'ltr';
+                
+                if (employeeId) {
+                    try {
+                        await google.script.run
+                            .withSuccessHandler(result => {
+                                console.log('Language preference saved:', result);
+                            })
+                            .withFailureHandler(error => {
+                                console.error('Error saving language preference:', error);
+                            })
+                            .updateEmployeeLanguage(employeeId, newLanguage);
+                    } catch (error) {
+                        console.error('Error updating language preference:', error);
+                    }
+                }
+                
+                localStorage.setItem('preferredLanguage', newLanguage);
+            };
+            
+            return React.createElement(LanguageContext.Provider, {
+                value: { language, setLanguage, t, switchLanguage }
+            }, children);
+        }
+        
+        // Employee Session Management (exact from employee app)
+        function setEmployeeSession(employee) {
+            const sessionData = {
+                employeeId: employee.id,
+                employeeName: employee.name,
+                employeePin: employee.pin,
+                employeeRole: employee.role || 'employee',
+                preferredLanguage: employee.preferred_language || 'en',
+                loginTime: new Date().toISOString(),
+                sessionExpiry: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+            };
+            
+            Object.entries(sessionData).forEach(([key, value]) => {
+                document.cookie = `${key}=${value}; path=/; max-age=28800`;
+            });
+            
+            return sessionData;
+        }
+        
+        function getEmployeeSession() {
+            const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                const [key, value] = cookie.trim().split('=');
+                if (key) acc[key] = value;
+                return acc;
+            }, {});
+            
+            if (cookies.employeeId && cookies.sessionExpiry) {
+                const expiry = new Date(cookies.sessionExpiry);
+                if (expiry > new Date()) {
+                    return {
+                        employeeId: cookies.employeeId,
+                        employeeName: cookies.employeeName,
+                        employeePin: cookies.employeePin,
+                        employeeRole: cookies.employeeRole || 'employee',
+                        preferredLanguage: cookies.preferredLanguage || 'en',
+                        loginTime: cookies.loginTime,
+                        sessionExpiry: cookies.sessionExpiry
+                    };
+                }
+            }
+            return null;
+        }
+        
+        function clearEmployeeSession() {
+            ['employeeId', 'employeeName', 'employeePin', 'employeeRole', 'preferredLanguage', 'loginTime', 'sessionExpiry'].forEach(key => {
+                document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            });
+        }
+
+        // Language Switcher Component (exact from employee app)
+        function LanguageSwitcher({ employeeSession }) {
+            const { language, switchLanguage, t } = React.useContext(LanguageContext);
+            
+            const handleLanguageChange = (newLanguage) => {
+                switchLanguage(newLanguage, employeeSession ? employeeSession.employeeId : null);
+            };
+            
+            return React.createElement('div', {
+                className: 'flex items-center gap-2 justify-center'
+            },
+                React.createElement('span', {
+                    className: 'text-sm text-gray-600'
+                }, t('language') + ':'),
+                React.createElement('select', {
+                    value: language,
+                    onChange: function(e) { return handleLanguageChange(e.target.value); },
+                    className: 'text-sm border rounded px-3 py-2 bg-white min-h-[40px] min-w-[80px]'
+                },
+                    React.createElement('option', { value: 'en' }, t('english')),
+                    React.createElement('option', { value: 'ar' }, t('arabic'))
+                )
+            );
+        }
+
+        // PIN Login Component (exact from employee app)
+        function LoginScreen({ onLogin }) {
+            const { t } = React.useContext(LanguageContext);
+            const [pin, setPin] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
+            const [error, setError] = React.useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!pin || pin.length < 4) {
+                    setError(t('validPinRequired'));
+                    return;
+                }
+
+                setLoading(true);
+                setError('');
+
+                try {
+                    const result = await google.script.run
+                        .withSuccessHandler(response => {
+                            const data = JSON.parse(response);
+                            if (data.success) {
+                                const sessionData = setEmployeeSession(data.employee);
+                                onLogin(sessionData);
+                            } else {
+                                setError(data.message || t('invalidPin'));
+                                setLoading(false);
+                            }
+                        })
+                        .withFailureHandler(error => {
+                            setError(t('authenticationFailed'));
+                            setLoading(false);
+                        })
+                        .validateEmployeePin(pin);
+                } catch (error) {
+                    setError(t('connectionError'));
+                    setLoading(false);
+                }
+            };
+
+            return React.createElement('div', {
+                className: 'min-h-screen flex items-center justify-center bg-gradient-to-br from-redbrand-50 to-redbrand-100 px-4 py-8'
+            },
+                React.createElement('div', {
+                    className: 'bg-white p-4 sm:p-6 md:p-8 rounded-lg shadow-lg w-full max-w-sm sm:max-w-md'
+                },
+                    React.createElement('div', {
+                        className: 'text-center mb-4 sm:mb-6'
+                    },
+                        React.createElement('h1', {
+                            className: 'text-xl sm:text-2xl font-bold text-gray-800 mb-2'
+                        }, t('appTitle')),
+                        React.createElement('p', {
+                            className: 'text-gray-600'
+                        }, t('enterPinToAccess'))
+                    ),
+                    
+                    React.createElement('form', {
+                        onSubmit: handleSubmit
+                    },
+                        React.createElement('div', {
+                            className: 'mb-4'
+                        },
+                            React.createElement('label', {
+                                className: 'block text-sm font-medium text-gray-700 mb-2'
+                            }, t('employeePin')),
+                            React.createElement('input', {
+                                type: 'password',
+                                value: pin,
+                                onChange: e => {
+                                    const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+                                    setPin(value);
+                                },
+                                onInput: e => {
+                                    e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
+                                },
+                                className: 'w-full p-4 md:p-3 border-2 rounded-lg focus:ring-2 focus:ring-redbrand-500 focus:border-redbrand-500 text-center text-xl md:text-lg font-mono min-h-[56px] md:min-h-[48px]',
+                                placeholder: t('enterPin'),
+                                maxLength: '6',
+                                inputMode: 'numeric',
+                                pattern: '[0-9]*',
+                                autoComplete: 'one-time-code',
+                                autoCorrect: 'off',
+                                autoCapitalize: 'off',
+                                spellCheck: 'false',
+                                disabled: loading,
+                                style: { fontSize: '18px' }
+                            })
+                        ),
+                        
+                        error && React.createElement('div', {
+                            className: 'mb-4 p-3 bg-red-50 border border-red-200 rounded-lg'
+                        },
+                            React.createElement('p', {
+                                className: 'text-red-600 text-sm'
+                            }, error)
+                        ),
+                        
+                        React.createElement('button', {
+                            type: 'submit',
+                            disabled: loading || !pin,
+                            className: 'w-full bg-redbrand-600 text-white p-4 md:p-3 rounded-lg hover:bg-redbrand-700 active:bg-redbrand-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg font-medium min-h-[56px] md:min-h-[48px] touch-manipulation'
+                        },
+                            loading ? React.createElement(React.Fragment, null,
+                                React.createElement('div', {
+                                    className: 'animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2'
+                                }),
+                                t('authenticating')
+                            ) : t('login')
+                        )
+                    ),
+                    
+                    React.createElement('div', {
+                        className: 'mt-6 text-center text-xs text-gray-500'
+                    },
+                        React.createElement('p', null, t('contactSupervisor'))
+                    ),
+                    
+                    React.createElement('div', {
+                        className: 'mt-4 border-t pt-4'
+                    },
+                        React.createElement(LanguageSwitcher, { employeeSession: null })
+                    )
+                )
+            );
+        }
+
+        // Role-based Navigation Component
+        function Navigation({ activeTab, onTabChange, employeeSession, onLogout }) {
+            const { t } = React.useContext(LanguageContext);
+            const userRole = (employeeSession && employeeSession.employeeRole) ? employeeSession.employeeRole : 'employee';
+            
+            // Define tabs based on role (same logic as employee app)
+            const getTabsForRole = (role) => {
+                switch (role) {
+                    case 'staff':
+                    case 'employee':
+                        return [
+                            { id: 'daily_entry', label: t('dailyEntry'), icon: '📝' },
+                            { id: 'weekly_counts', label: t('weeklyCounts'), icon: '📋' }
+                        ];
+                    case 'manager':
+                    case 'supervisor':
+                    case 'admin':
+                        return [
+                            { id: 'home', label: t('dashboard'), icon: '🏠' },
+                            { id: 'daily_entry', label: t('dailyEntry'), icon: '📝' },
+                            { id: 'management', label: t('management'), icon: '📊' },
+                            { id: 'orders', label: t('orders'), icon: '🛒' },
+                            { id: 'menu', label: t('menu'), icon: '📋' },
+                            { id: 'ingredients', label: t('ingredients'), icon: '🥬' },
+                            { id: 'inventory', label: t('inventory'), icon: '📦' },
+                            { id: 'suppliers', label: t('suppliers'), icon: '🚛' },
+                            { id: 'employees', label: t('employees'), icon: '👥' },
+                            { id: 'reports', label: t('reports'), icon: '📈' }
+                        ];
+                    default:
+                        return [
+                            { id: 'daily_entry', label: t('dailyEntry'), icon: '📝' }
+                        ];
+                }
+            };
+            
+            const tabs = getTabsForRole(userRole);
+            const isEmployee = userRole === 'staff' || userRole === 'employee';
+
+            return React.createElement('nav', {
+                className: 'bg-white shadow-sm border-b border-gray-200'
+            },
+                React.createElement('div', {
+                    className: 'w-full px-2 sm:px-4'
+                },  
+                    React.createElement('div', {
+                        className: 'flex justify-between items-center min-h-[60px] overflow-x-auto'
+                    },
+                        React.createElement('div', {
+                            className: 'flex space-x-2 sm:space-x-6 flex-nowrap'
+                        },
+                            tabs.map(function(tab) {
+                                return React.createElement('button', {
+                                    key: tab.id,
+                                    onClick: function() { return onTabChange(tab.id); },
+                                    className: 'flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 transition-all duration-200 whitespace-nowrap ' + (
+                                        activeTab === tab.id
+                                            ? (isEmployee ? 'text-redbrand-600 border-redbrand-600 bg-redbrand-50' : 'text-olive-600 border-olive-600 bg-olive-50')
+                                            : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                                    )
+                                },
+                                    React.createElement('span', null, tab.icon),
+                                    React.createElement('span', {
+                                        className: 'whitespace-nowrap'
+                                    }, tab.label)
+                                );
+                            })
+                        ),
+                        
+                        React.createElement('div', {
+                            className: 'flex items-center gap-4'
+                        },
+                            React.createElement(LanguageSwitcher, { employeeSession: employeeSession }),
+                            React.createElement('span', {
+                                className: 'flex items-center gap-2 sm:gap-4 flex-shrink-0 ml-2'
+                            }, 
+                                React.createElement('span', {
+                                    className: 'text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600'
+                                }, t('role' + employeeSession.employeeRole.charAt(0).toUpperCase() + employeeSession.employeeRole.slice(1))),
+                                t('hello') + ', ' + employeeSession.employeeName
+                            ),
+                            React.createElement('button', {
+                                onClick: onLogout,
+                                className: 'text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded border border-gray-300 hover:border-gray-400'
+                            }, t('logout'))
+                        )
+                    )
+                )
+            );
+        }
+
+        // Tab Components - Starting with placeholders (to be replaced with actual components)
+        
+        // Management Dashboard (placeholder - will use management app's component)
+        function HomeTab({ onTabChange }) {
+            const { t } = React.useContext(LanguageContext);
+            
+            // Check if external management dashboard component exists
+            if (typeof window.ManagementDashboard !== 'undefined') {
+                return React.createElement(window.ManagementDashboard);
+            }
+            
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-2xl font-bold text-gray-800 mb-4'
+                }, t('dashboard')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Management dashboard loading...')
+            );
+        }
+
+        // Daily Entry Tab (will use employee app's component)
+// REMOVE or COMMENT OUT this old function since logic is now in renderActiveTab()
+
+/*
+// OLD FUNCTION - REMOVE THIS
+function DailyEntryTab({ employeeSession }) {
+    const { t } = React.useContext(LanguageContext);
+    
+    // Check if external daily entry component exists
+    if (typeof window.EmployeeDailyEntryTab !== 'undefined') {
+        return React.createElement(window.EmployeeDailyEntryTab, { employeeSession: employeeSession });
+    }
+    
+    return React.createElement('div', {
+        className: 'bg-white rounded-lg shadow p-6'
+    },
+        React.createElement('h2', {
+            className: 'text-xl font-semibold mb-4'
+        }, t('dailyOperationsEntry')),
+        React.createElement('p', {
+            className: 'text-gray-600'
+        }, 'Daily entry form loading...')
+    );
+}
+*/
+        // Management Analytics Tab
+        function ManagementTab() {
+            const { t } = React.useContext(LanguageContext);
+            
+            // Check if external management dashboard component exists
+            if (typeof window.ManagementDashboard !== 'undefined') {
+                return React.createElement(window.ManagementDashboard);
+            }
+            
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('management')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Advanced analytics and management tools loading...')
+            );
+        }
+
+        // Placeholder tabs for management features
+        function OrdersTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('orders')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Order management coming soon...')
+            );
+        }
+
+        function MenuTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('menu')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Menu management coming soon...')
+            );
+        }
+
+        function IngredientsTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('ingredients')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Ingredients management coming soon...')
+            );
+        }
+
+        function InventoryTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('inventory')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Inventory management coming soon...')
+            );
+        }
+
+        function SuppliersTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('suppliers')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Suppliers management coming soon...')
+            );
+        }
+
+        function EmployeesTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('employees')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Employee management coming soon...')
+            );
+        }
+
+        function ReportsTab() {
+            const { t } = React.useContext(LanguageContext);
+            return React.createElement('div', {
+                className: 'bg-white rounded-lg shadow p-6'
+            },
+                React.createElement('h2', {
+                    className: 'text-xl font-semibold mb-4'
+                }, t('reports')),
+                React.createElement('p', {
+                    className: 'text-gray-600'
+                }, 'Reports and analytics coming soon...')
+            );
+        }
+
+        function WeeklyCountsTab({ employeeSession }) {
+            const { t } = React.useContext(LanguageContext);
+            if (typeof window.EmployeeWeeklyEntryTab !== "undefined") {
+                return React.createElement(window.EmployeeWeeklyEntryTab, { employeeSession });
+            }
+            return React.createElement("div", { className: "bg-white rounded-lg shadow p-6" },
+                React.createElement("h2", { className: "text-xl font-semibold mb-4" }, t('weeklyInventoryCounts')),
+                React.createElement("p", { className: "text-gray-600" }, t('weeklyInventorySystem'))
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+            const [employeeSession, setEmployeeSession] = React.useState(null);
+            const [activeTab, setActiveTab] = React.useState('');
+            const [loading, setLoading] = React.useState(true);
+            const [initialLanguage, setInitialLanguage] = React.useState('en');
+
+            // App state for management features
+            const [appState, setAppState] = React.useState({
+                loading: false,
+                initialized: true,
+                error: null,
+                data: {
+                    ingredients: [],
+                    products: [],
+                    recipes: [],
+                    orders: [],
+                    orderItems: [],
+                    employees: [],
+                    suppliers: [],
+                    dailyShawarmaStack: [],
+                    dailySales: [],
+                    dailyInventoryCount: [],
+                    dailyProductSales: []
+                }
+            });
+
+            React.useEffect(function() {
+                // Check for existing session and language preference (same as employee app)
+                const session = getEmployeeSession();
+                const savedLanguage = localStorage.getItem('preferredLanguage') || 'en';
+                
+                if (session) {
+                    setEmployeeSession(session);
+                    setIsAuthenticated(true);
+                    const preferredLang = session.preferredLanguage || savedLanguage;
+                    setInitialLanguage(preferredLang);
+                    
+                    // Set initial document direction AND language
+                    document.documentElement.dir = preferredLang === 'ar' ? 'rtl' : 'ltr';
+                    document.documentElement.lang = preferredLang;
+                    
+                    // Set default tab based on role - FIX: Don't set state during render
+                    setTimeout(function() {
+                        const userRole = session.employeeRole || 'employee';
+                        if (userRole === 'staff' || userRole === 'employee') {
+                            setActiveTab('daily_entry');
+                        } else {
+                            setActiveTab('home');
+                        }
+                    }, 0);
+                } else {
+                    setInitialLanguage(savedLanguage);
+                    
+                    // Set initial document direction AND language
+                    document.documentElement.dir = savedLanguage === 'ar' ? 'rtl' : 'ltr';
+                    document.documentElement.lang = savedLanguage;
+                }
+                
+                setLoading(false);
+            }, []);
+
+            const handleLogin = function(sessionData) {
+                setEmployeeSession(sessionData);
+                setIsAuthenticated(true);
+                
+                // Set language from employee preference
+                if (sessionData.preferredLanguage) {
+                    setInitialLanguage(sessionData.preferredLanguage);
+                    document.documentElement.dir = sessionData.preferredLanguage === 'ar' ? 'rtl' : 'ltr';
+                    document.documentElement.lang = sessionData.preferredLanguage;
+                    localStorage.setItem('preferredLanguage', sessionData.preferredLanguage);
+                }
+                
+                // Set default tab based on role - FIX: Use setTimeout to avoid render-time state update
+                setTimeout(function() {
+                    const userRole = sessionData.employeeRole || 'employee';
+                    if (userRole === 'staff' || userRole === 'employee') {
+                        setActiveTab('daily_entry');
+                    } else {
+                        setActiveTab('home');
+                    }
+                }, 0);
+            };
+
+            const handleLogout = function() {
+                clearEmployeeSession();
+                setEmployeeSession(null);
+                setIsAuthenticated(false);
+                setActiveTab('');
+                document.documentElement.dir = 'ltr';
+            };
+
+            const renderActiveTab = function() {
+    const userRole = (employeeSession && employeeSession.employeeRole) ? employeeSession.employeeRole : 'employee';
+    
+    try {
+        switch (activeTab) {
+            case 'home':
+                return React.createElement(HomeTab, {
+                    onTabChange: setActiveTab
+                });
+                
+            case 'daily_entry':
+                // FIXED: Role-based routing for daily entry
+                if (userRole === 'staff' || userRole === 'employee') {
+                    // Employee users get the bilingual employee component
+                    if (typeof window.EmployeeDailyEntryTab !== 'undefined') {
+                        return React.createElement(window.EmployeeDailyEntryTab, { 
+                            employeeSession: employeeSession 
+                        });
+                    } else {
+                        // Fallback for employees
+                        return React.createElement('div', {
+                            className: 'bg-white rounded-lg shadow p-6'
+                        },
+                            React.createElement('h2', {
+                                className: 'text-xl font-semibold mb-4'
+                            }, 'Employee Daily Entry'),
+                            React.createElement('p', {
+                                className: 'text-gray-600'
+                            }, 'Employee daily entry form loading...')
+                        );
+                    }
+                } else {
+                    // Management users get the management daily entry component
+                    if (typeof window.DailyEntryTab !== 'undefined') {
+                        return React.createElement(window.DailyEntryTab, { 
+                            employeeSession: employeeSession 
+                        });
+                    } else {
+                        // Fallback for management
+                        return React.createElement('div', {
+                            className: 'bg-white rounded-lg shadow p-6'
+                        },
+                            React.createElement('h2', {
+                                className: 'text-xl font-semibold mb-4'
+                            }, 'Management Daily Entry'),
+                            React.createElement('p', {
+                                className: 'text-gray-600'
+                            }, 'Management daily entry form loading...')
+                        );
+                    }
+                }
+                
+            case 'weekly_counts':
+                return React.createElement(WeeklyCountsTab, {
+                    employeeSession: employeeSession
+                });
+                
+            case 'management':
+                return React.createElement(ManagementTab);
+                
+            case 'orders':
+                return React.createElement(OrdersTab);
+                
+            case 'menu':
+                return React.createElement(MenuTab);
+                
+            case 'ingredients':
+                return React.createElement(IngredientsTab);
+                
+            case 'inventory':
+                return React.createElement(InventoryTab);
+                
+            case 'suppliers':
+                return React.createElement(SuppliersTab);
+                
+            case 'employees':
+                return React.createElement(EmployeesTab);
+                
+            case 'reports':
+                return React.createElement(ReportsTab);
+                
+            case '':
+                // Don't set state during render - just return loading
+                return React.createElement('div', {
+                    className: 'bg-white rounded-lg shadow p-6'
+                },
+                    React.createElement('h2', {
+                        className: 'text-xl font-semibold mb-4'
+                    }, 'Loading...'),
+                    React.createElement('p', {
+                        className: 'text-gray-600'
+                    }, 'Preparing your interface...')
+                );
+                
+            default:
+                // Don't set state during render - just return loading
+                return React.createElement('div', {
+                    className: 'bg-white rounded-lg shadow p-6'
+                },
+                    React.createElement('h2', {
+                        className: 'text-xl font-semibold mb-4'
+                    }, 'Loading...'),
+                    React.createElement('p', {
+                        className: 'text-gray-600'
+                    }, 'Preparing your interface...')
+                );
+        }
+    } catch (error) {
+        console.error("Error rendering tab:", error);
+        return React.createElement('div', {
+            className: 'bg-red-50 border border-red-200 rounded-lg p-6'
+        },
+            React.createElement('h2', {
+                className: 'text-red-800 font-semibold mb-2'
+            }, 'Error Loading Tab'),
+            React.createElement('p', {
+                className: 'text-red-600'
+            }, 'Please refresh the page or try a different tab.')
+        );
+    }
+};
+
+            return React.createElement(LanguageProvider, {
+                key: initialLanguage,
+                initialLanguage: initialLanguage
+            },
+                React.createElement(AppContext.Provider, {
+                    value: { state: appState, setState: setAppState }
+                },
+                    React.createElement(LanguageConsumer)
+                )
+            );
+            
+            function LanguageConsumer() {
+                const { t } = React.useContext(LanguageContext);
+                
+                if (loading) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen flex items-center justify-center bg-gradient-to-br from-redbrand-50 to-redbrand-100'
+                    },
+                        React.createElement('div', {
+                            className: 'text-center'
+                        },
+                            React.createElement('div', {
+                                className: 'animate-spin rounded-full h-12 w-12 border-b-2 border-redbrand-600 mb-4 mx-auto'
+                            }),
+                            React.createElement('p', {
+                                className: 'text-redbrand-600'
+                            }, 'Loading Restaurant System...')
+                        )
+                    );
+                }
+
+                if (!isAuthenticated) {
+                    return React.createElement(LoginScreen, {
+                        onLogin: handleLogin
+                    });
+                }
+
+                const userRole = (employeeSession && employeeSession.employeeRole) ? employeeSession.employeeRole : 'employee';
+                const isEmployee = userRole === 'staff' || userRole === 'employee';
+
+                return React.createElement('div', {
+                    className: 'min-h-screen bg-gradient-to-br ' + (isEmployee ? 'from-redbrand-50 to-redbrand-100' : 'from-olive-50 to-olive-100')
+                },
+                    React.createElement('header', {
+                        className: 'bg-white shadow-sm'
+                    },
+                        React.createElement('div', {
+                            className: 'container mx-auto px-4 py-4'
+                        },
+                            React.createElement('h1', {
+                                className: 'text-2xl font-bold ' + (isEmployee ? 'text-redbrand-800' : 'text-olive-800')
+                            }, t(isEmployee ? 'appTitle' : 'restaurantManagement')),
+                            React.createElement('p', {
+                                className: (isEmployee ? 'text-redbrand-600' : 'text-olive-600')
+                            }, t(isEmployee ? 'dailyOperationsAndInventory' : 'completeOperationsControl'))
+                        )
+                    ),
+
+                    React.createElement(Navigation, {
+                        activeTab: activeTab,
+                        onTabChange: setActiveTab,
+                        employeeSession: employeeSession,
+                        onLogout: handleLogout
+                    }),
+
+                    React.createElement('main', {
+                        className: 'container mx-auto px-4 py-8'
+                    },
+                        renderActiveTab()
+                    )
+                );
+            }
+        }
+
+        // Error boundary component
+        function ErrorBoundary({ children }) {
+            const [hasError, setHasError] = React.useState(false);
+            
+            if (hasError) {
+                return React.createElement('div', {
+                    className: 'min-h-screen flex items-center justify-center bg-red-50'
+                },
+                    React.createElement('div', {
+                        className: 'text-center'
+                    },
+                        React.createElement('h2', {
+                            className: 'text-xl font-bold text-red-800 mb-4'
+                        }, 'Something went wrong'),
+                        React.createElement('button', {
+                            onClick: () => setHasError(false),
+                            className: 'bg-red-600 text-white px-4 py-2 rounded'
+                        }, 'Try again')
+                    )
+                );
+            }
+            
+            return children;
+        }
+
+        // Initialize the unified app
+        window.initializeRestaurantApp = function() {
+            console.log("Initializing unified restaurant React app...");
+            try {
+                ReactDOM.render(
+                    React.createElement(ErrorBoundary, null, 
+                        React.createElement(App)
+                    ), 
+                    document.getElementById('root')
+                );
+                console.log("Unified restaurant app rendered successfully");
+            } catch (error) {
+                console.error("Error rendering unified restaurant app:", error);
+            }
+        };
+
+        console.log("Unified restaurant app components defined");
+    </script>
+
+    <!-- Include component files from existing apps -->
+    <?!= include('BilingualEmployeeDailyEntryTab'); ?>
+    <?!= include('BilingualEmployeeWeeklyEntryTab'); ?>
+    <?!= include('ManagementDashboard'); ?>
+    <?!= include('DailyEntryTab'); ?>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("DOM loaded");
+            
+            setTimeout(function() {
+                if (typeof window.initializeRestaurantApp === 'function') {
+                    console.log("Calling initializeRestaurantApp");
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('root').style.display = 'block';
+                    window.initializeRestaurantApp();
+                } else {
+                    console.error("initializeRestaurantApp not found");
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
