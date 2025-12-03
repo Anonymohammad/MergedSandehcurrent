@@ -108,8 +108,27 @@ const REQUIRED_SHEETS = {
   
   DailySales: {
     requiredHeaders: [
-      'id', 'sales_date', 'total_revenue', 'shawarma_revenue', 'total_food_cost', 
+      'id', 'sales_date', 'total_revenue', 'shawarma_revenue', 'total_food_cost',
       'food_cost_percentage', 'total_orders', 'employee_id', 'created_at', 'updated_at'
+    ]
+  },
+
+  DailySalesBreakdown: {
+    requiredHeaders: [
+      'id', 'sales_date', 'daily_sales_id', 'cash_sales', 'card_sales', 'delivery_sales',
+      'aggregator_details', 'cash_expenses', 'expense_notes', 'created_at', 'updated_at'
+    ]
+  },
+
+  DeliveryAggregators: {
+    requiredHeaders: [
+      'id', 'name', 'commission_percent', 'active', 'created_at', 'updated_at'
+    ]
+  },
+
+  DailyPettyCash: {
+    requiredHeaders: [
+      'id', 'sales_date', 'daily_sales_id', 'category', 'description', 'amount', 'paid_by', 'created_at', 'updated_at'
     ]
   },
   
@@ -228,7 +247,9 @@ function initializeDatabase() {
   } else {
     initializeDefaultEmployeeData();
   }
-  
+
+  initializeAggregatorSettingsIfNeeded();
+
   return isNewDatabase;
 }
 
@@ -316,6 +337,32 @@ function initializeDefaultEmployeeData() {
   });
   
   initializeSystemSettingsIfNeeded();
+}
+
+function initializeAggregatorSettingsIfNeeded() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+  if (!sheet) return;
+
+  if (sheet.getLastRow() > 1) {
+    return;
+  }
+
+  const defaults = [
+    { name: 'Talabat', commission_percent: 20, active: true },
+    { name: 'Snoonu', commission_percent: 25, active: true }
+  ];
+
+  defaults.forEach(item => {
+    const row = [
+      Utilities.getUuid(),
+      item.name,
+      item.commission_percent,
+      item.active,
+      new Date(),
+      new Date()
+    ];
+    sheet.appendRow(row);
+  });
 }
 
 function initializeSystemSettingsIfNeeded() {
@@ -526,11 +573,13 @@ function deleteExistingEntries(dateString) {
     
     const sheetsToClean = [
       'DailyShawarmaStack',
-      'DailyRawProteins', 
+      'DailyRawProteins',
       'DailyMarinatedProteins',
       'DailyBreadTracking',
       'DailyHighCostItems',
-      'DailySales'
+      'DailySales',
+      'DailySalesBreakdown',
+      'DailyPettyCash'
     ];
     
     sheetsToClean.forEach(sheetName => {
@@ -664,6 +713,9 @@ function generateDailyReport(date) {
     
     const shawarmaData = getSheetData('DailyShawarmaStack');
     const salesData = getSheetData('DailySales');
+    const salesBreakdownData = getSheetData('DailySalesBreakdown');
+    const pettyCashData = getSheetData('DailyPettyCash');
+    const aggregatorSettings = getAggregatorSettings(true);
     const rawProteinsData = getSheetData('DailyRawProteins');
     const marinatedProteinsData = getSheetData('DailyMarinatedProteins');
     const breadData = getSheetData('DailyBreadTracking');
@@ -675,6 +727,16 @@ function generateDailyReport(date) {
     });
     
     const todaySales = salesData.find(row => {
+      if (!row.sales_date) return false;
+      return new Date(row.sales_date).toDateString() === targetDateString;
+    });
+
+    const todaySalesBreakdown = salesBreakdownData.find(row => {
+      if (!row.sales_date) return false;
+      return new Date(row.sales_date).toDateString() === targetDateString;
+    });
+
+    const todayPettyCash = pettyCashData.filter(row => {
       if (!row.sales_date) return false;
       return new Date(row.sales_date).toDateString() === targetDateString;
     });
@@ -704,6 +766,9 @@ function generateDailyReport(date) {
       dataFound: !!(todayShawarma || todaySales || todayRawProteins || todayBread || todayMarinatedProteins || todayHighCost),
       shawarma: todayShawarma || null,
       sales: todaySales || null,
+      salesBreakdown: todaySalesBreakdown || null,
+      pettyCash: todayPettyCash || [],
+      deliveryAggregators: aggregatorSettings,
       rawProteins: todayRawProteins || null,
       marinatedProteins: todayMarinatedProteins || null,
       bread: todayBread || null,
@@ -849,24 +914,81 @@ function saveHighCostItemsData(entryData, entryDate, employeeId) {
   highCostSheet.appendRow(row);
 }
 
-// Save Sales Data (EXACT from Employee Code.gs)
+// Save Sales Data with payment breakdown linkage
 function saveSalesData(entryData, entryDate, employeeId) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const salesSheet = ss.getSheetByName('DailySales');
-  const salesData = entryData.sales;
-  
+  const salesData = entryData.sales || {};
+
   const totalRevenue = parseFloat(salesData.total_revenue) || 0;
   const shawarmaRevenue = parseFloat(salesData.shawarma_revenue) || 0;
   const estimatedFoodCost = totalRevenue * 0.22;
   const foodCostPercentage = totalRevenue > 0 ? (estimatedFoodCost / totalRevenue) * 100 : 0;
   const totalOrders = 0;
-  
+
+  const salesId = Utilities.getUuid();
+
   const row = [
-    Utilities.getUuid(), entryDate, totalRevenue, shawarmaRevenue, estimatedFoodCost,
+    salesId, entryDate, totalRevenue, shawarmaRevenue, estimatedFoodCost,
     foodCostPercentage, totalOrders, employeeId, new Date(), new Date()
   ];
-  
+
   salesSheet.appendRow(row);
+
+  saveSalesBreakdown(entryData, entryDate, employeeId, salesId);
+
+  return salesId;
+}
+
+// Save payment method and cash expense breakdown
+function saveSalesBreakdown(entryData, entryDate, employeeId, salesId) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const breakdownSheet = ss.getSheetByName('DailySalesBreakdown');
+  const breakdown = entryData.paymentBreakdown || {};
+
+  const cashSales = parseFloat(breakdown.cash_sales) || 0;
+  const cardSales = parseFloat(breakdown.card_sales) || 0;
+  const deliveryAggregators = Array.isArray(breakdown.delivery_aggregators) ? breakdown.delivery_aggregators : [];
+  const deliverySales = deliveryAggregators.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  const aggregatorDetails = JSON.stringify(deliveryAggregators);
+  const pettyCashTotal = Array.isArray(entryData.pettyCashEntries)
+    ? entryData.pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)
+    : parseFloat(breakdown.cash_expenses) || 0;
+  const expenseNotes = breakdown.expense_notes || '';
+
+  const row = [
+    Utilities.getUuid(), entryDate, salesId, cashSales, cardSales, deliverySales,
+    aggregatorDetails, pettyCashTotal, expenseNotes, new Date(), new Date()
+  ];
+
+  breakdownSheet.appendRow(row);
+
+  if (Array.isArray(entryData.pettyCashEntries)) {
+    savePettyCashEntries(entryData.pettyCashEntries, entryDate, salesId, employeeId);
+  }
+}
+
+function savePettyCashEntries(entries, entryDate, salesId, employeeId) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DailyPettyCash');
+  if (!sheet) return;
+
+  entries
+    .filter(item => (parseFloat(item.amount) || 0) > 0)
+    .forEach(item => {
+      const row = [
+        Utilities.getUuid(),
+        entryDate,
+        salesId,
+        item.category || '',
+        item.description || '',
+        parseFloat(item.amount) || 0,
+        item.paid_by || 'Cash',
+        new Date(),
+        new Date()
+      ];
+
+      sheet.appendRow(row);
+    });
 }
 
 // NEW: Get all data for management dashboard (enhanced version for management features)
@@ -882,6 +1004,8 @@ function getData() {
       suppliers: getSheetData('Suppliers'),
       dailyShawarmaStack: getSheetData('DailyShawarmaStack'),
       dailySales: getSheetData('DailySales'),
+      dailySalesBreakdown: getSheetData('DailySalesBreakdown'),
+      dailyPettyCash: getSheetData('DailyPettyCash'),
       dailyRawProteins: getSheetData('DailyRawProteins'),
       dailyMarinatedProteins: getSheetData('DailyMarinatedProteins'),
       dailyBreadTracking: getSheetData('DailyBreadTracking'),
@@ -890,10 +1014,63 @@ function getData() {
       dailyProductSales: getSheetData('DailyProductSales'),
       weeklyInventory: getSheetData('WeeklyInventory')
     };
+    data.deliveryAggregators = getAggregatorSettings(true);
     return JSON.stringify(data);
   } catch (error) {
     Logger.log('Error getting data: ' + error.toString());
     throw new Error('Failed to retrieve data: ' + error.message);
+  }
+}
+
+function getAggregatorSettings(returnRaw) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  const items = data.slice(1).map(row => {
+    const record = {};
+    headers.forEach((header, idx) => record[header] = row[idx]);
+    return record;
+  });
+
+  return returnRaw ? items : JSON.stringify(items);
+}
+
+function saveAggregatorSettings(settingsJson) {
+  try {
+    const settings = JSON.parse(settingsJson);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('DeliveryAggregators');
+    if (!sheet) {
+      return JSON.stringify({ success: false, message: 'Aggregator sheet missing' });
+    }
+
+    const headers = REQUIRED_SHEETS.DeliveryAggregators.requiredHeaders;
+    sheet.clearContents();
+    sheet.getRange(1, 1, 1, headers.length)
+      .setValues([headers])
+      .setBackground('#E6E6E6')
+      .setFontWeight('bold');
+
+    settings.forEach(item => {
+      const id = item.id || Utilities.getUuid();
+      const created = item.created_at ? new Date(item.created_at) : new Date();
+      const row = [
+        id,
+        item.name || '',
+        parseFloat(item.commission_percent) || 0,
+        item.active === false ? false : true,
+        created,
+        new Date()
+      ];
+      sheet.appendRow(row);
+    });
+
+    return JSON.stringify({ success: true });
+  } catch (error) {
+    Logger.log('Error saving aggregator settings: ' + error.toString());
+    return JSON.stringify({ success: false, message: 'Failed to save aggregators' });
   }
 }
 // Weekly Inventory Functions
