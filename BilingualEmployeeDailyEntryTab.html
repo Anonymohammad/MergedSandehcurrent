@@ -103,6 +103,34 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
     const [showPettyCash, setShowPettyCash] = React.useState(false);
 
     React.useEffect(() => {
+        if (!aggregatorOptions.length) return;
+
+        setFormData(prev => {
+            const existing = prev.paymentBreakdown?.delivery_aggregators || [];
+
+            const merged = aggregatorOptions.map(option => {
+                const matched = existing.find(item =>
+                    (item.id && option.id && item.id === option.id) ||
+                    (!item.id && !option.id && item.name === option.name)
+                );
+
+                return {
+                    ...option,
+                    amount: matched ? matched.amount || '' : ''
+                };
+            });
+
+            return {
+                ...prev,
+                paymentBreakdown: {
+                    ...prev.paymentBreakdown,
+                    delivery_aggregators: merged
+                }
+            };
+        });
+    }, [aggregatorOptions, selectedDate]);
+
+    React.useEffect(() => {
         const applyAggregators = (list) => {
             const active = (list || []).filter(item => item.active !== false);
             setAggregatorOptions(active);
