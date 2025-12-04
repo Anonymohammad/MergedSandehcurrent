@@ -97,20 +97,30 @@ function DailyEntryTab() {
             cream_received: '',
             cream_expired: '',
             cream_remaining: '',
-            
+
             // Mayo
             mayo_opening: '',
             mayo_received: '',
             mayo_expired: '',
             mayo_remaining: ''
         },
-        
+
         // Daily Sales (Simple - only 2 fields)
         sales: {
             total_revenue: '',
             shawarma_revenue: ''
         },
-        
+
+        // Payment method breakdown and cash expenses
+        paymentBreakdown: {
+            cash_sales: '',
+            card_sales: '',
+            delivery_aggregators: [],
+            aggregator_details: '',
+            cash_expenses: '',
+            expense_notes: ''
+        },
+
         // Notes
         notes: ''
     });
@@ -128,6 +138,9 @@ function DailyEntryTab() {
     const [fieldsLocked, setFieldsLocked] = React.useState(false);
     const [showLoadExistingPin, setShowLoadExistingPin] = React.useState(false);
     const [loadExistingPin, setLoadExistingPin] = React.useState('');
+    const [aggregatorOptions, setAggregatorOptions] = React.useState([]);
+    const [pettyCashEntries, setPettyCashEntries] = React.useState([]);
+    const [showPettyCash, setShowPettyCash] = React.useState(false);
     
     // NEW: Dynamic range calculation functions
     const getAcceptableRemainingRange = (stackWeightKg) => {
@@ -161,7 +174,47 @@ function DailyEntryTab() {
     // Calculate metrics in real-time
     React.useEffect(() => {
         calculateMetrics();
-    }, [formData]);
+    }, [formData, pettyCashEntries]);
+
+    // Load aggregator options once
+    React.useEffect(() => {
+        const applyAggregators = (list) => {
+            const active = (list || []).filter(item => item.active !== false);
+            setAggregatorOptions(active);
+            setFormData(prev => ({
+                ...prev,
+                paymentBreakdown: {
+                    ...prev.paymentBreakdown,
+                    delivery_aggregators: active.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        commission_percent: item.commission_percent,
+                        amount: ''
+                    }))
+                }
+            }));
+        };
+
+        google.script.run
+            .withSuccessHandler(result => {
+                try {
+                    const parsed = Array.isArray(result)
+                        ? result
+                        : (typeof result === 'string' && result.trim())
+                            ? JSON.parse(result)
+                            : [];
+                    applyAggregators(parsed);
+                } catch (error) {
+                    console.error('Failed to parse aggregator settings', error);
+                    applyAggregators([]);
+                }
+            })
+            .withFailureHandler(err => {
+                console.error('Failed to load aggregators', err);
+                applyAggregators([]);
+            })
+            .getAggregatorSettings(false);
+    }, []);
     
     // Check for existing entry when date changes
     React.useEffect(() => {
@@ -349,8 +402,16 @@ function DailyEntryTab() {
             });
         }
         
-        // Sales calculations
+        // Sales calculations with breakdown
         const totalRevenue = parseFloat(sales.total_revenue) || 0;
+        const breakdown = formData.paymentBreakdown || {};
+        const breakdownTotal =
+            (parseFloat(breakdown.cash_sales) || 0) +
+            (parseFloat(breakdown.card_sales) || 0) +
+            ((breakdown.delivery_aggregators || []).reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0));
+        const pettyCashTotal = pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const cashAfterExpenses = (parseFloat(breakdown.cash_sales) || 0) - pettyCashTotal;
+        const breakdownVariance = totalRevenue - breakdownTotal;
         
         setCalculatedMetrics({
             shawarma: {
@@ -361,7 +422,10 @@ function DailyEntryTab() {
                 revenuePerKg: revenuePerKg.toFixed(2)
             },
             sales: {
-                shawarmaPercentage: totalRevenue > 0 ? ((shawarmaRevenue / totalRevenue) * 100).toFixed(1) : '0.0'
+                shawarmaPercentage: totalRevenue > 0 ? ((shawarmaRevenue / totalRevenue) * 100).toFixed(1) : '0.0',
+                breakdownTotal: breakdownTotal.toFixed(2),
+                breakdownVariance: breakdownVariance.toFixed(2),
+                cashAfterExpenses: cashAfterExpenses.toFixed(2)
             },
             ranges: {
                 lossRange: lossRange,
@@ -428,6 +492,31 @@ function DailyEntryTab() {
                 [field]: value
             }
         }));
+    };
+
+    const updateAggregatorAmount = (id, value) => {
+        setFormData(prev => ({
+            ...prev,
+            paymentBreakdown: {
+                ...prev.paymentBreakdown,
+                delivery_aggregators: (prev.paymentBreakdown.delivery_aggregators || []).map(item =>
+                    item.id === id ? { ...item, amount: value } : item
+                )
+            }
+        }));
+    };
+
+    const addPettyCashEntry = () => {
+        const uid = `pc-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        setPettyCashEntries(prev => [...prev, { id: uid, category: '', description: '', amount: '', paid_by: 'Cash' }]);
+    };
+
+    const updatePettyCashEntry = (id, key, value) => {
+        setPettyCashEntries(prev => prev.map(item => item.id === id ? { ...item, [key]: value } : item));
+    };
+
+    const removePettyCashEntry = (id) => {
+        setPettyCashEntries(prev => prev.filter(item => item.id !== id));
     };
     
     const handleSubmit = async (e) => {
@@ -496,6 +585,8 @@ function DailyEntryTab() {
                     total_waste_percentage: calculatedMetrics && calculatedMetrics.shawarma ? calculatedMetrics.shawarma.totalWastePercentage : 0
                 },
                 sales: formData.sales,
+                paymentBreakdown: formData.paymentBreakdown,
+                pettyCashEntries: pettyCashEntries,
                 inventory: inventory,
                 notes: formData.notes,
                 isUpdate: isUpdateMode,
@@ -562,8 +653,12 @@ function DailyEntryTab() {
             sales: {
                 total_revenue: '', shawarma_revenue: ''
             },
+            paymentBreakdown: {
+                cash_sales: '', card_sales: '', delivery_aggregators: aggregatorOptions.map(a => ({ ...a, amount: '' })), aggregator_details: '', cash_expenses: '', expense_notes: ''
+            },
             notes: ''
         });
+        setPettyCashEntries([]);
         setIsUpdateMode(false);
     };
     
@@ -610,6 +705,24 @@ function DailyEntryTab() {
                                     sales: {
                                         total_revenue: data.sales ? String(data.sales.total_revenue || '') : '',
                                         shawarma_revenue: data.sales ? String(data.sales.shawarma_revenue || '') : ''
+                                    },
+                                    paymentBreakdown: {
+                                        cash_sales: data.salesBreakdown ? String(data.salesBreakdown.cash_sales || '') : '',
+                                        card_sales: data.salesBreakdown ? String(data.salesBreakdown.card_sales || '') : '',
+                                        delivery_aggregators: (() => {
+                                            try {
+                                                const parsed = data.salesBreakdown && data.salesBreakdown.aggregator_details ? JSON.parse(data.salesBreakdown.aggregator_details) : [];
+                                                return aggregatorOptions.map(option => {
+                                                    const matched = parsed.find(p => p.id === option.id || p.name === option.name);
+                                                    return { ...option, amount: matched ? String(matched.amount || '') : '' };
+                                                });
+                                            } catch (error) {
+                                                return aggregatorOptions.map(option => ({ ...option, amount: '' }));
+                                            }
+                                        })(),
+                                        aggregator_details: data.salesBreakdown ? String(data.salesBreakdown.aggregator_details || '') : '',
+                                        cash_expenses: data.salesBreakdown ? String(data.salesBreakdown.cash_expenses || '') : '',
+                                        expense_notes: data.salesBreakdown ? String(data.salesBreakdown.expense_notes || '') : ''
                                     },
                                     rawProteins: {
                                         frozen_chicken_breast_opening: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_remaining || '') : '',
@@ -671,12 +784,20 @@ function DailyEntryTab() {
                                         mayo_received: data.highCostItems ? String(data.highCostItems.mayo_received || '') : '',
                                         mayo_expired: '',
                                         mayo_remaining: data.highCostItems ? String(data.highCostItems.mayo_remaining || '') : ''
-                                    },
-                                    notes: data.notes || ''
-                                }));
-                                
-                                setFieldsLocked(false);
-                                setIsUpdateMode(true);
+                                },
+                                notes: data.notes || ''
+                            }));
+
+                                setPettyCashEntries((data.pettyCash || []).map(item => ({
+                                    id: item.id || `pc-${item.sales_date}-${Math.random().toString(16).slice(2)}`,
+                                    category: item.category || '',
+                                    description: item.description || '',
+                                    amount: item.amount || '',
+                                    paid_by: item.paid_by || 'Cash'
+                                })));
+
+                            setFieldsLocked(false);
+                            setIsUpdateMode(true);
                                 setDuplicateWarning(false);
                                 setShowLoadExistingPin(false);
                                 setLoadExistingPin('');
@@ -742,9 +863,14 @@ function DailyEntryTab() {
             sales: {
                 total_revenue: '', shawarma_revenue: ''
             },
+            paymentBreakdown: {
+                cash_sales: '', card_sales: '', delivery_aggregators: aggregatorOptions.map(a => ({ ...a, amount: '' })), aggregator_details: '', cash_expenses: '', expense_notes: ''
+            },
             notes: ''
         });
-        
+
+        setPettyCashEntries([]);
+
         setDuplicateWarning(false);
         setIsUpdateMode(false);
         setFieldsLocked(false);
@@ -1416,7 +1542,87 @@ function DailyEntryTab() {
                             }, 'Used for shawarma profitability calculations')
                         )
                     ),
-                    
+
+                    // Payment Method Breakdown
+                    React.createElement('div', { className: 'mt-6 space-y-4' },
+                        React.createElement('div', {
+                            className: 'flex items-center justify-between flex-wrap gap-2'
+                        },
+                            React.createElement('h4', { className: 'font-medium text-gray-800' }, 'Payment Method Breakdown'),
+                            React.createElement('p', { className: 'text-sm text-gray-500' }, 'Optional: helps reconcile totals without changing existing sales table')
+                        ),
+                        React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                            ['cash_sales', 'card_sales'].map(key => (
+                                React.createElement('div', { key },
+                                    React.createElement('label', { className: 'block text-sm font-medium mb-1' },
+                                        key === 'cash_sales' ? 'Cash Sales (QAR)' : 'Card/POS Sales (QAR)'
+                                    ),
+                                    React.createElement('input', {
+                                        type: 'number',
+                                        step: '0.01',
+                                        value: formData.paymentBreakdown[key],
+                                        onChange: e => handleInputChange('paymentBreakdown', key, e.target.value),
+                                        className: 'w-full p-2 border rounded focus:ring-2 focus:ring-olive-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                        disabled: fieldsLocked
+                                    })
+                                )
+                            ))
+                        ),
+                        React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                            React.createElement('div', null,
+                                React.createElement('h5', { className: 'text-sm font-semibold mb-2' }, 'Delivery Aggregators'),
+                                React.createElement('div', { className: 'space-y-2' },
+                                    (formData.paymentBreakdown.delivery_aggregators || []).map(item => (
+                                        React.createElement('div', { key: item.id, className: 'border rounded p-3 bg-white shadow-sm' },
+                                            React.createElement('div', { className: 'flex justify-between items-center' },
+                                                React.createElement('div', null,
+                                                    React.createElement('p', { className: 'text-sm font-medium text-gray-800' }, item.name || 'Aggregator'),
+                                                    React.createElement('p', { className: 'text-xs text-gray-500' }, `Commission: ${item.commission_percent || 0}%`)
+                                                ),
+                                                React.createElement('div', { className: 'w-32' },
+                                                    React.createElement('input', {
+                                                        type: 'number',
+                                                        step: '0.01',
+                                                        value: item.amount,
+                                                        onChange: e => updateAggregatorAmount(item.id, e.target.value),
+                                                        className: 'w-full p-2 border rounded focus:ring-2 focus:ring-olive-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                                        disabled: fieldsLocked
+                                                    })
+                                                )
+                                            )
+                                        )
+                                    ))
+                                )
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('label', { className: 'block text-sm font-medium mb-1' }, 'Aggregator Notes (optional)'),
+                                React.createElement('textarea', {
+                                    value: formData.paymentBreakdown.aggregator_details,
+                                    onChange: e => handleInputChange('paymentBreakdown', 'aggregator_details', e.target.value),
+                                    className: 'w-full p-3 border rounded focus:ring-2 focus:ring-olive-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                    rows: '2',
+                                    placeholder: 'e.g., Talabat 1200, Snoonu 900',
+                                    disabled: fieldsLocked
+                                })
+                            )
+                        )
+                    ),
+
+                    React.createElement('div', { className: 'flex items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg' },
+                        React.createElement('div', null,
+                            React.createElement('h4', { className: 'font-medium text-gray-800' }, 'Petty Cash'),
+                            React.createElement('p', { className: 'text-sm text-gray-500' }, 'Track daily petty cash payouts from the cash drawer')
+                        ),
+                        React.createElement('div', { className: 'flex items-center gap-3' },
+                            React.createElement('div', { className: 'text-sm text-gray-700' }, `Total: ${(pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)).toFixed(2)} QAR`),
+                            React.createElement('button', {
+                                type: 'button',
+                                onClick: () => setShowPettyCash(true),
+                                className: 'px-4 py-2 bg-olive-600 text-white rounded shadow hover:bg-olive-700'
+                            }, pettyCashEntries.length ? `Edit Entries (${pettyCashEntries.length})` : 'Add Petty Cash')
+                        )
+                    ),
+
                     // Sales Metrics Display
                     calculatedMetrics && calculatedMetrics.sales && React.createElement('div', {
                         className: 'mt-4 p-4 bg-gray-50 rounded-lg'
@@ -1425,7 +1631,7 @@ function DailyEntryTab() {
                             className: 'font-medium text-gray-800 mb-2'
                         }, 'Sales Analysis:'),
                         React.createElement('div', {
-                            className: 'grid grid-cols-2 gap-4 text-sm'
+                            className: 'grid grid-cols-1 md:grid-cols-2 gap-4 text-sm'
                         },
                             React.createElement('div', null,
                                 React.createElement('span', {
@@ -1442,6 +1648,18 @@ function DailyEntryTab() {
                                 React.createElement('p', {
                                     className: 'font-medium text-green-600'
                                 }, ((parseFloat(formData.sales.total_revenue) || 0) - (parseFloat(formData.sales.shawarma_revenue) || 0)).toFixed(2) + ' QAR')
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('span', { className: 'text-gray-600' }, 'Payment Breakdown Total:'),
+                                React.createElement('p', { className: 'font-medium text-gray-800' }, (calculatedMetrics.sales.breakdownTotal || '0.00') + ' QAR')
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('span', { className: 'text-gray-600' }, 'Variance vs. Reported Total:'),
+                                React.createElement('p', { className: 'font-medium ' + (Math.abs(parseFloat(calculatedMetrics.sales.breakdownVariance)) < 1 ? 'text-green-600' : 'text-orange-600') }, (calculatedMetrics.sales.breakdownVariance || '0.00') + ' QAR')
+                            ),
+                            React.createElement('div', null,
+                                React.createElement('span', { className: 'text-gray-600' }, 'Cash after Expenses:'),
+                                React.createElement('p', { className: 'font-medium text-purple-600' }, (calculatedMetrics.sales.cashAfterExpenses || '0.00') + ' QAR')
                             )
                         )
                     )
@@ -1490,7 +1708,89 @@ function DailyEntryTab() {
                         }, 'PIN required to update entry for ' + selectedDate)
                     )
                 ),
-                
+
+                showPettyCash && React.createElement('div', {
+                    className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
+                },
+                    React.createElement('div', {
+                        className: 'bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 space-y-4'
+                    },
+                        React.createElement('div', { className: 'flex justify-between items-center' },
+                            React.createElement('h3', { className: 'text-lg font-semibold text-gray-800' }, 'Petty Cash Entries'),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'text-gray-500 hover:text-gray-700',
+                                onClick: () => setShowPettyCash(false)
+                            }, '✕')
+                        ),
+                        React.createElement('div', { className: 'space-y-3 max-h-80 overflow-y-auto pr-1' },
+                            pettyCashEntries.map(entry => (
+                                React.createElement('div', { key: entry.id, className: 'grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-3' },
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, 'Category'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: entry.category,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'category', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', { className: 'md:col-span-2' },
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, 'Description'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: entry.description,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'description', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, 'Amount'),
+                                        React.createElement('input', {
+                                            type: 'number',
+                                            step: '0.01',
+                                            value: entry.amount,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'amount', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', { className: 'flex items-end justify-between gap-2' },
+                                        React.createElement('div', { className: 'flex-1' },
+                                            React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, 'Paid By'),
+                                            React.createElement('input', {
+                                                type: 'text',
+                                                value: entry.paid_by,
+                                                onChange: e => updatePettyCashEntry(entry.id, 'paid_by', e.target.value),
+                                                className: 'w-full p-2 border rounded'
+                                            })
+                                        ),
+                                        React.createElement('button', {
+                                            type: 'button',
+                                            onClick: () => removePettyCashEntry(entry.id),
+                                            className: 'text-red-600 hover:text-red-800 text-sm'
+                                        }, 'Remove')
+                                    )
+                                )
+                            ))
+                        ),
+                        React.createElement('div', { className: 'flex items-center justify-between pt-2' },
+                            React.createElement('div', { className: 'text-sm text-gray-700' }, `Total: ${(pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)).toFixed(2)} QAR`),
+                            React.createElement('div', { className: 'space-x-2' },
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: addPettyCashEntry,
+                                    className: 'px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200'
+                                }, 'Add Entry'),
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: () => setShowPettyCash(false),
+                                    className: 'px-4 py-2 bg-olive-600 text-white rounded hover:bg-olive-700'
+                                }, 'Done')
+                            )
+                        )
+                    )
+                ),
+
                 // Submit Button
                 React.createElement('div', {
                     className: 'flex justify-end space-x-4'

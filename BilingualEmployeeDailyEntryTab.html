@@ -40,12 +40,11 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
             original_strips_opening: '',
             original_strips_received: '',
             original_strips_expired: '',
-                original_strips_remaining: '',
-    // ADD THIS NEW SECTION:
-    marinated_steak_opening: '',
-    marinated_steak_received: '',
-    marinated_steak_expired: '',
-    marinated_steak_remaining: ''
+            original_strips_remaining: '',
+            marinated_steak_opening: '',
+            marinated_steak_received: '',
+            marinated_steak_expired: '',
+            marinated_steak_remaining: ''
         },
         bread: {
             saj_bread_opening: '',
@@ -75,6 +74,14 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
             total_revenue: '',
             shawarma_revenue: ''
         },
+        paymentBreakdown: {
+            cash_sales: '',
+            card_sales: '',
+            delivery_aggregators: [],
+            aggregator_details: '',
+            cash_expenses: '',
+            expense_notes: ''
+        },
         notes: ''
     });
     
@@ -90,6 +97,48 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
     const [showLoadExistingPin, setShowLoadExistingPin] = React.useState(false);
     const [loadExistingPin, setLoadExistingPin] = React.useState('');
     const [pinError, setPinError] = React.useState(false);
+    const [aggregatorOptions, setAggregatorOptions] = React.useState([]);
+    const [pettyCashEntries, setPettyCashEntries] = React.useState([]);
+    const [showPettyCash, setShowPettyCash] = React.useState(false);
+
+    React.useEffect(() => {
+        const applyAggregators = (list) => {
+            const active = (list || []).filter(item => item.active !== false);
+            setAggregatorOptions(active);
+            setFormData(prev => ({
+                ...prev,
+                paymentBreakdown: {
+                    ...prev.paymentBreakdown,
+                    delivery_aggregators: active.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        commission_percent: item.commission_percent,
+                        amount: ''
+                    }))
+                }
+            }));
+        };
+
+        google.script.run
+            .withSuccessHandler(result => {
+                try {
+                    const parsed = Array.isArray(result)
+                        ? result
+                        : (typeof result === 'string' && result.trim())
+                            ? JSON.parse(result)
+                            : [];
+                    applyAggregators(parsed);
+                } catch (error) {
+                    console.error('Failed to parse aggregator settings', error);
+                    applyAggregators([]);
+                }
+            })
+            .withFailureHandler(err => {
+                console.error('Failed to load aggregators', err);
+                applyAggregators([]);
+            })
+            .getAggregatorSettings(false);
+    }, []);
     
     React.useEffect(() => {
         if (selectedDate) {
@@ -162,8 +211,7 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                     chicken_sub_opening: (data.marinatedProteins && data.marinatedProteins.chicken_sub_remaining) ? data.marinatedProteins.chicken_sub_remaining : '',
                                     spicy_strips_opening: (data.marinatedProteins && data.marinatedProteins.spicy_strips_remaining) ? data.marinatedProteins.spicy_strips_remaining : '',
                                     original_strips_opening: (data.marinatedProteins && data.marinatedProteins.original_strips_remaining) ? data.marinatedProteins.original_strips_remaining : '',
-    // ADD THIS LINE:
-    marinated_steak_opening: (data.marinatedProteins && data.marinatedProteins.marinated_steak_remaining) ? data.marinatedProteins.marinated_steak_remaining : ''
+                                    marinated_steak_opening: (data.marinatedProteins && data.marinatedProteins.marinated_steak_remaining) ? data.marinatedProteins.marinated_steak_remaining : ''
                                 },
                                 bread: {
                                     ...prev.bread,
@@ -222,6 +270,24 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                     sales: {
                                         total_revenue: data.sales ? String(data.sales.total_revenue || '') : '',
                                         shawarma_revenue: data.sales ? String(data.sales.shawarma_revenue || '') : ''
+                                    },
+                                    paymentBreakdown: {
+                                        cash_sales: data.salesBreakdown ? String(data.salesBreakdown.cash_sales || '') : '',
+                                        card_sales: data.salesBreakdown ? String(data.salesBreakdown.card_sales || '') : '',
+                                        delivery_aggregators: (() => {
+                                            try {
+                                                const parsed = data.salesBreakdown && data.salesBreakdown.aggregator_details ? JSON.parse(data.salesBreakdown.aggregator_details) : [];
+                                                return (aggregatorOptions.length ? aggregatorOptions : parsed).map(option => {
+                                                    const matched = parsed.find(p => p.id === option.id || p.name === option.name);
+                                                    return { ...option, amount: matched ? String(matched.amount || '') : '' };
+                                                });
+                                            } catch (error) {
+                                                return aggregatorOptions.map(option => ({ ...option, amount: '' }));
+                                            }
+                                        })(),
+                                        aggregator_details: data.salesBreakdown ? String(data.salesBreakdown.aggregator_details || '') : '',
+                                        cash_expenses: data.salesBreakdown ? String(data.salesBreakdown.cash_expenses || '') : '',
+                                        expense_notes: data.salesBreakdown ? String(data.salesBreakdown.expense_notes || '') : ''
                                     },
                                     rawProteins: {
                                         frozen_chicken_breast_opening: data.rawProteins ? String(data.rawProteins.frozen_chicken_breast_opening || '') : '',
@@ -286,6 +352,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                     },
                                     notes: data.notes || ''
                                 });
+                                setPettyCashEntries((data.pettyCash || []).map(item => ({
+                                    ...item,
+                                    id: item.id || `${item.category || 'entry'}-${Math.random()}`
+                                })));
                             }
 
                             setFieldsLocked(false);
@@ -345,12 +415,21 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
             sales: {
                 total_revenue: '', shawarma_revenue: ''
             },
+            paymentBreakdown: {
+                cash_sales: '',
+                card_sales: '',
+                delivery_aggregators: aggregatorOptions.map(a => ({ ...a, amount: '' })),
+                aggregator_details: '',
+                cash_expenses: '',
+                expense_notes: ''
+            },
             notes: ''
         });
-        
+
         setDuplicateWarning(false);
         setIsUpdateMode(false);
         setFieldsLocked(false);
+        setPettyCashEntries([]);
         setShowLoadExistingPin(false);
         setLoadExistingPin('');
         setLoadingExistingData(false);
@@ -365,6 +444,33 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                 [field]: value
             }
         }));
+    };
+
+    const updateAggregatorAmount = (id, value) => {
+        setFormData(prev => ({
+            ...prev,
+            paymentBreakdown: {
+                ...prev.paymentBreakdown,
+                delivery_aggregators: (prev.paymentBreakdown.delivery_aggregators || []).map(item =>
+                    item.id === id ? { ...item, amount: value } : item
+                )
+            }
+        }));
+    };
+
+    const addPettyCashEntry = () => {
+        setPettyCashEntries(prev => ([
+            ...prev,
+            { id: Date.now().toString(), category: '', description: '', amount: '', paid_by: '' }
+        ]));
+    };
+
+    const updatePettyCashEntry = (id, field, value) => {
+        setPettyCashEntries(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    };
+
+    const removePettyCashEntry = (id) => {
+        setPettyCashEntries(prev => prev.filter(item => item.id !== id));
     };
     
     const handleSubmit = async (e) => {
@@ -389,6 +495,8 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                 date: selectedDate,
                 shawarmaStack: formData.shawarmaStack,
                 sales: formData.sales,
+                paymentBreakdown: formData.paymentBreakdown,
+                pettyCashEntries: pettyCashEntries,
                 rawProteins: formData.rawProteins,
                 marinatedProteins: formData.marinatedProteins,
                 bread: formData.bread,
@@ -456,9 +564,18 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
             sales: {
                 total_revenue: '', shawarma_revenue: ''
             },
+            paymentBreakdown: {
+                cash_sales: '',
+                card_sales: '',
+                delivery_aggregators: aggregatorOptions.map(a => ({ ...a, amount: '' })),
+                aggregator_details: '',
+                cash_expenses: '',
+                expense_notes: ''
+            },
             notes: ''
         });
         setIsUpdateMode(false);
+        setPettyCashEntries([]);
     };
     
     const cancelUpdate = () => {
@@ -824,10 +941,9 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         {key: 'fahita_chicken', labelKey: 'fahitaChicken'},
                         {key: 'chicken_sub', labelKey: 'chickenSub'},
                         {key: 'spicy_strips', labelKey: 'spicyStrips'},
-                         {key: 'original_strips', labelKey: 'originalStrips'},
-    // ADD THIS LINE:
-    {key: 'marinated_steak', labelKey: 'marinatedSteak'}
-], 'kg')
+                        {key: 'original_strips', labelKey: 'originalStrips'},
+                        {key: 'marinated_steak', labelKey: 'marinatedSteak'}
+                    ], 'kg')
                 ),
                 
                 React.createElement('div', {
@@ -863,7 +979,7 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                     React.createElement('h3', {
                         className: 'text-lg font-semibold text-gray-800 mb-4'
                     }, '💵 ' + t('dailySales')),
-                    
+
                     React.createElement('div', {
                         className: 'grid grid-cols-1 md:grid-cols-2 gap-4'
                     },
@@ -897,7 +1013,83 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         )
                     )
                 ),
-                
+
+                React.createElement('div', { className: 'border border-gray-200 rounded-lg p-6 space-y-4' },
+                    React.createElement('div', { className: 'flex items-center justify-between flex-wrap gap-2' },
+                        React.createElement('h4', { className: 'font-medium text-gray-800' }, t('paymentMethodBreakdown') || 'Payment Method Breakdown'),
+                        React.createElement('p', { className: 'text-sm text-gray-500' }, t('paymentBreakdownHint') || 'Optional: helps reconcile totals without changing existing sales table')
+                    ),
+                    React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                        ['cash_sales', 'card_sales'].map(key => (
+                            React.createElement('div', { key },
+                                React.createElement('label', { className: 'block text-sm font-medium mb-1' },
+                                    key === 'cash_sales' ? (t('cashSalesQar') || 'Cash Sales (QAR)') : (t('cardSalesQar') || 'Card/POS Sales (QAR)')
+                                ),
+                                React.createElement('input', {
+                                    type: 'number',
+                                    step: '0.01',
+                                    value: formData.paymentBreakdown[key],
+                                    onChange: e => handleInputChange('paymentBreakdown', key, e.target.value),
+                                    className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                    disabled: fieldsLocked
+                                })
+                            )
+                        ))
+                    ),
+                    React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                        React.createElement('div', null,
+                            React.createElement('h5', { className: 'text-sm font-semibold mb-2' }, t('deliveryAggregators') || 'Delivery Aggregators'),
+                            React.createElement('div', { className: 'space-y-2' },
+                                (formData.paymentBreakdown.delivery_aggregators || []).map(item => (
+                                    React.createElement('div', { key: item.id || item.name, className: 'border rounded p-3 bg-white shadow-sm' },
+                                        React.createElement('div', { className: 'flex justify-between items-center' },
+                                            React.createElement('div', null,
+                                                React.createElement('p', { className: 'text-sm font-medium text-gray-800' }, item.name || 'Aggregator')
+                                            ),
+                                            React.createElement('div', { className: 'w-32' },
+                                                React.createElement('input', {
+                                                    type: 'number',
+                                                    step: '0.01',
+                                                    value: item.amount,
+                                                    onChange: e => updateAggregatorAmount(item.id, e.target.value),
+                                                    className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                                    disabled: fieldsLocked
+                                                })
+                                            )
+                                        )
+                                    )
+                                ))
+                            )
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('label', { className: 'block text-sm font-medium mb-1' }, t('aggregatorNotes') || 'Aggregator Notes (optional)'),
+                            React.createElement('textarea', {
+                                value: formData.paymentBreakdown.aggregator_details,
+                                onChange: e => handleInputChange('paymentBreakdown', 'aggregator_details', e.target.value),
+                                className: 'w-full p-3 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
+                                rows: '2',
+                                placeholder: 'e.g., Talabat 1200, Snoonu 900',
+                                disabled: fieldsLocked
+                            })
+                        )
+                    )
+                ),
+
+                React.createElement('div', { className: 'flex items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg border' },
+                    React.createElement('div', null,
+                        React.createElement('h4', { className: 'font-medium text-gray-800' }, t('pettyCash') || 'Petty Cash'),
+                        React.createElement('p', { className: 'text-sm text-gray-500' }, t('pettyCashHint') || 'Track daily petty cash payouts from the cash drawer')
+                    ),
+                    React.createElement('div', { className: 'flex items-center gap-3' },
+                        React.createElement('div', { className: 'text-sm text-gray-700' }, `${t('totalLabel') || 'Total'}: ${(pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)).toFixed(2)} QAR`),
+                        React.createElement('button', {
+                            type: 'button',
+                            onClick: () => setShowPettyCash(true),
+                            className: 'px-4 py-2 bg-redbrand-600 text-white rounded shadow hover:bg-redbrand-700'
+                        }, pettyCashEntries.length ? `${t('editEntries') || 'Edit Entries'} (${pettyCashEntries.length})` : (t('addPettyCash') || 'Add Petty Cash'))
+                    )
+                ),
+
                 React.createElement('div', {
                     className: 'border border-gray-200 rounded-lg p-6'
                 },
@@ -939,7 +1131,89 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         }, t('pinToUpdateEntry') + ' ' + selectedDate)
                     )
                 ),
-                
+
+                showPettyCash && React.createElement('div', {
+                    className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'
+                },
+                    React.createElement('div', {
+                        className: 'bg-white rounded-lg shadow-xl w-full max-w-3xl p-6 space-y-4'
+                    },
+                        React.createElement('div', { className: 'flex justify-between items-center' },
+                            React.createElement('h3', { className: 'text-lg font-semibold text-gray-800' }, t('pettyCashEntriesTitle') || 'Petty Cash Entries'),
+                            React.createElement('button', {
+                                type: 'button',
+                                className: 'text-gray-500 hover:text-gray-700',
+                                onClick: () => setShowPettyCash(false)
+                            }, '✕')
+                        ),
+                        React.createElement('div', { className: 'space-y-3 max-h-80 overflow-y-auto pr-1' },
+                            pettyCashEntries.map(entry => (
+                                React.createElement('div', { key: entry.id, className: 'grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-3' },
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, t('category') || 'Category'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: entry.category,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'category', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', { className: 'md:col-span-2' },
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, t('description') || 'Description'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: entry.description,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'description', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, t('amount') || 'Amount'),
+                                        React.createElement('input', {
+                                            type: 'number',
+                                            step: '0.01',
+                                            value: entry.amount,
+                                            onChange: e => updatePettyCashEntry(entry.id, 'amount', e.target.value),
+                                            className: 'w-full p-2 border rounded'
+                                        })
+                                    ),
+                                    React.createElement('div', { className: 'flex items-end justify-between gap-2' },
+                                        React.createElement('div', { className: 'flex-1' },
+                                            React.createElement('label', { className: 'block text-xs text-gray-600 mb-1' }, t('paidBy') || 'Paid By'),
+                                            React.createElement('input', {
+                                                type: 'text',
+                                                value: entry.paid_by,
+                                                onChange: e => updatePettyCashEntry(entry.id, 'paid_by', e.target.value),
+                                                className: 'w-full p-2 border rounded'
+                                            })
+                                        ),
+                                        React.createElement('button', {
+                                            type: 'button',
+                                            onClick: () => removePettyCashEntry(entry.id),
+                                            className: 'text-red-600 hover:text-red-800 text-sm'
+                                        }, t('remove') || 'Remove')
+                                    )
+                                )
+                            ))
+                        ),
+                        React.createElement('div', { className: 'flex items-center justify-between pt-2' },
+                            React.createElement('div', { className: 'text-sm text-gray-700' }, `${t('totalLabel') || 'Total'}: ${(pettyCashEntries.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0)).toFixed(2)} QAR`),
+                            React.createElement('div', { className: 'space-x-2' },
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: addPettyCashEntry,
+                                    className: 'px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200'
+                                }, t('addEntry') || 'Add Entry'),
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: () => setShowPettyCash(false),
+                                    className: 'px-4 py-2 bg-redbrand-600 text-white rounded hover:bg-redbrand-700'
+                                }, t('done') || 'Done')
+                            )
+                        )
+                    )
+                ),
+
                 React.createElement('div', {
                     className: 'flex justify-end space-x-4'
                 },

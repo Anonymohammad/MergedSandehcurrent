@@ -15,12 +15,28 @@ function ManagementDashboard() {
     });
     const [showDataStatus, setShowDataStatus] = React.useState(false);
     const [showDebugData, setShowDebugData] = React.useState(false);
+    const [aggregators, setAggregators] = React.useState([]);
+    const [aggregatorSaving, setAggregatorSaving] = React.useState(false);
 
     React.useEffect(() => {
         if (selectedPeriod !== 'custom' || (selectedPeriod === 'custom' && customDate)) {
             loadDashboardData();
         }
     }, [selectedPeriod, customDate]);
+
+    React.useEffect(() => {
+        google.script.run
+            .withSuccessHandler(data => {
+                try {
+                    const parsed = JSON.parse(data) || [];
+                    setAggregators(parsed);
+                } catch (error) {
+                    console.error('Failed to parse aggregators', error);
+                }
+            })
+            .withFailureHandler(err => console.error('Failed to load aggregators', err))
+            .getAggregatorSettings(false);
+    }, []);
 
     const getAcceptableRemainingRange = (stackWeightKg) => {
         return {
@@ -278,6 +294,26 @@ function ManagementDashboard() {
         }
 
         setAlerts(newAlerts);
+    };
+
+    const addAggregator = () => {
+        const tempId = `new-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        setAggregators(prev => [...prev, { id: tempId, name: '', commission_percent: '', active: true }]);
+    };
+
+    const updateAggregator = (id, key, value) => {
+        setAggregators(prev => prev.map(item => (item.id === id ? { ...item, [key]: value } : item)));
+    };
+
+    const saveAggregators = () => {
+        setAggregatorSaving(true);
+        google.script.run
+            .withSuccessHandler(() => setAggregatorSaving(false))
+            .withFailureHandler(err => {
+                console.error('Save aggregators failed', err);
+                setAggregatorSaving(false);
+            })
+            .saveAggregatorSettings(JSON.stringify(aggregators));
     };
 
     const getAlertColor = (type) => {
@@ -799,6 +835,72 @@ function ManagementDashboard() {
                             ))}
                         </div>
                     )}
+                </div>
+            </div>
+
+            {/* Delivery Aggregator Settings */}
+            <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex justify-between items-center mb-4">
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-800">🚚 Delivery Aggregators</h3>
+                        <p className="text-sm text-gray-600">Manage aggregator names and commission percentages</p>
+                    </div>
+                    <div className="space-x-2">
+                        <button onClick={addAggregator} className="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm">Add Aggregator</button>
+                        <button onClick={saveAggregators} disabled={aggregatorSaving} className="px-4 py-2 bg-olive-600 text-white rounded hover:bg-olive-700 text-sm disabled:opacity-50">
+                            {aggregatorSaving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full border">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="text-left text-xs font-medium text-gray-600 px-3 py-2 border">Name</th>
+                                <th className="text-left text-xs font-medium text-gray-600 px-3 py-2 border">Commission %</th>
+                                <th className="text-left text-xs font-medium text-gray-600 px-3 py-2 border">Active</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {aggregators.map((item, idx) => (
+                                <tr key={item.id || `temp-${idx}`}>
+                                    <td className="border px-3 py-2">
+                                        <input
+                                            type="text"
+                                            value={item.name}
+                                            onChange={e => updateAggregator(item.id, 'name', e.target.value)}
+                                            className="w-full p-2 border rounded"
+                                        />
+                                    </td>
+                                    <td className="border px-3 py-2">
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            value={item.commission_percent}
+                                            onChange={e => updateAggregator(item.id, 'commission_percent', e.target.value)}
+                                            className="w-full p-2 border rounded"
+                                        />
+                                    </td>
+                                    <td className="border px-3 py-2">
+                                        <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                                            <input
+                                                type="checkbox"
+                                                checked={item.active !== false}
+                                                onChange={e => updateAggregator(item.id, 'active', e.target.checked)}
+                                            />
+                                            <span>{item.active === false ? 'Inactive' : 'Active'}</span>
+                                        </label>
+                                    </td>
+                                </tr>
+                            ))}
+                            {aggregators.length === 0 && (
+                                <tr>
+                                    <td colSpan="3" className="text-center text-sm text-gray-500 px-3 py-4">No aggregators defined yet.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
