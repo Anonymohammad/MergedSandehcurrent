@@ -40,12 +40,11 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
             original_strips_opening: '',
             original_strips_received: '',
             original_strips_expired: '',
-                original_strips_remaining: '',
-    // ADD THIS NEW SECTION:
-    marinated_steak_opening: '',
-    marinated_steak_received: '',
-    marinated_steak_expired: '',
-    marinated_steak_remaining: ''
+            original_strips_remaining: '',
+            marinated_steak_opening: '',
+            marinated_steak_received: '',
+            marinated_steak_expired: '',
+            marinated_steak_remaining: ''
         },
         bread: {
             saj_bread_opening: '',
@@ -240,8 +239,7 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                     chicken_sub_opening: (data.marinatedProteins && data.marinatedProteins.chicken_sub_remaining) ? data.marinatedProteins.chicken_sub_remaining : '',
                                     spicy_strips_opening: (data.marinatedProteins && data.marinatedProteins.spicy_strips_remaining) ? data.marinatedProteins.spicy_strips_remaining : '',
                                     original_strips_opening: (data.marinatedProteins && data.marinatedProteins.original_strips_remaining) ? data.marinatedProteins.original_strips_remaining : '',
-    // ADD THIS LINE:
-    marinated_steak_opening: (data.marinatedProteins && data.marinatedProteins.marinated_steak_remaining) ? data.marinatedProteins.marinated_steak_remaining : ''
+                                    marinated_steak_opening: (data.marinatedProteins && data.marinatedProteins.marinated_steak_remaining) ? data.marinatedProteins.marinated_steak_remaining : ''
                                 },
                                 bread: {
                                     ...prev.bread,
@@ -971,10 +969,9 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         {key: 'fahita_chicken', labelKey: 'fahitaChicken'},
                         {key: 'chicken_sub', labelKey: 'chickenSub'},
                         {key: 'spicy_strips', labelKey: 'spicyStrips'},
-                         {key: 'original_strips', labelKey: 'originalStrips'},
-    // ADD THIS LINE:
-    {key: 'marinated_steak', labelKey: 'marinatedSteak'}
-], 'kg')
+                        {key: 'original_strips', labelKey: 'originalStrips'},
+                        {key: 'marinated_steak', labelKey: 'marinatedSteak'}
+                    ], 'kg')
                 ),
                 
                 React.createElement('div', {
