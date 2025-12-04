@@ -1034,7 +1034,9 @@ function getData() {
 
 function getAggregatorSettings(returnRaw) {
   const sheet = getSheetWithNamespace('DeliveryAggregators');
-  if (!sheet || sheet.getLastRow() <= 1) return [];
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return returnRaw ? [] : JSON.stringify([]);
+  }
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
