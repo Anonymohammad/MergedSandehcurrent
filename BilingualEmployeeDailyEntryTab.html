@@ -102,34 +102,6 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
     const [showPettyCash, setShowPettyCash] = React.useState(false);
 
     React.useEffect(() => {
-        if (!aggregatorOptions.length) return;
-
-        setFormData(prev => {
-            const existing = prev.paymentBreakdown?.delivery_aggregators || [];
-
-            const merged = aggregatorOptions.map(option => {
-                const matched = existing.find(item =>
-                    (item.id && option.id && item.id === option.id) ||
-                    (!item.id && !option.id && item.name === option.name)
-                );
-
-                return {
-                    ...option,
-                    amount: matched ? matched.amount || '' : ''
-                };
-            });
-
-            return {
-                ...prev,
-                paymentBreakdown: {
-                    ...prev.paymentBreakdown,
-                    delivery_aggregators: merged
-                }
-            };
-        });
-    }, [aggregatorOptions, selectedDate]);
-
-    React.useEffect(() => {
         const applyAggregators = (list) => {
             const active = (list || []).filter(item => item.active !== false);
             setAggregatorOptions(active);
@@ -1072,8 +1044,7 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                     React.createElement('div', { key: item.id || item.name, className: 'border rounded p-3 bg-white shadow-sm' },
                                         React.createElement('div', { className: 'flex justify-between items-center' },
                                             React.createElement('div', null,
-                                                React.createElement('p', { className: 'text-sm font-medium text-gray-800' }, item.name || 'Aggregator'),
-                                                React.createElement('p', { className: 'text-xs text-gray-500' }, `${t('commissionLabel') || 'Commission'}: ${item.commission_percent || 0}%`)
+                                                React.createElement('p', { className: 'text-sm font-medium text-gray-800' }, item.name || 'Aggregator')
                                             ),
                                             React.createElement('div', { className: 'w-32' },
                                                 React.createElement('input', {

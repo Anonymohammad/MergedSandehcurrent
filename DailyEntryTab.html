@@ -178,28 +178,41 @@ function DailyEntryTab() {
 
     // Load aggregator options once
     React.useEffect(() => {
+        const applyAggregators = (list) => {
+            const active = (list || []).filter(item => item.active !== false);
+            setAggregatorOptions(active);
+            setFormData(prev => ({
+                ...prev,
+                paymentBreakdown: {
+                    ...prev.paymentBreakdown,
+                    delivery_aggregators: active.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        commission_percent: item.commission_percent,
+                        amount: ''
+                    }))
+                }
+            }));
+        };
+
         google.script.run
             .withSuccessHandler(result => {
                 try {
-                    const parsed = JSON.parse(result);
-                    setAggregatorOptions(parsed.filter(item => item.active !== false));
-                    setFormData(prev => ({
-                        ...prev,
-                        paymentBreakdown: {
-                            ...prev.paymentBreakdown,
-                            delivery_aggregators: parsed.map(item => ({
-                                id: item.id,
-                                name: item.name,
-                                commission_percent: item.commission_percent,
-                                amount: ''
-                            }))
-                        }
-                    }));
+                    const parsed = Array.isArray(result)
+                        ? result
+                        : (typeof result === 'string' && result.trim())
+                            ? JSON.parse(result)
+                            : [];
+                    applyAggregators(parsed);
                 } catch (error) {
                     console.error('Failed to parse aggregator settings', error);
+                    applyAggregators([]);
                 }
             })
-            .withFailureHandler(err => console.error('Failed to load aggregators', err))
+            .withFailureHandler(err => {
+                console.error('Failed to load aggregators', err);
+                applyAggregators([]);
+            })
             .getAggregatorSettings(false);
     }, []);
     
