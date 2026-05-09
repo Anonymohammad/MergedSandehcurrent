@@ -1414,7 +1414,13 @@ function generateWeeklyReport(date) {
 // Returns all active products with their full recipe (ingredient list) attached.
 function getProductsWithRecipes() {
   try {
-    const products   = getSheetData('Products').filter(p => String(p.active) !== 'false' && p.active !== false);
+    const seenIds = new Set();
+    const products = getSheetData('Products').filter(p => {
+      if (!p.id || (String(p.active) === 'false' || p.active === false)) return false;
+      if (seenIds.has(p.id)) return false;
+      seenIds.add(p.id);
+      return true;
+    });
     const recipes    = getSheetData('Recipes');
     const ingredients = getSheetData('Ingredients');
 
@@ -1480,20 +1486,29 @@ function saveProductSalesMix(productMixJson) {
 
 // Main procurement planner: given estimated revenue and product mix, calculate
 // ingredient requirements per period, compare to current stock, and flag restock items.
-// params: { periodStartDate, periodDays, estimatedRevenue, shawarmaRevenuePct, bufferPct }
+// params: { periodDays, dailyRevenue, shawarmaRevenuePct, bufferPct, avgShawarmaPrice }
 function generateProcurementPlan(params) {
   try {
     const p = typeof params === 'string' ? JSON.parse(params) : params;
 
-    const totalRevenue      = parseFloat(p.estimatedRevenue)    || 0;
+    const periodDays        = parseFloat(p.periodDays)          || 7;
+    const dailyRevenue      = parseFloat(p.dailyRevenue)        || parseFloat(p.estimatedRevenue) || 0;
+    const totalRevenue      = dailyRevenue * periodDays;
     const shawarmaRevPct    = parseFloat(p.shawarmaRevenuePct)  || parseFloat(getSetting('shawarma_pct_default', '60'));
     const bufferPct         = parseFloat(p.bufferPct)           || parseFloat(getSetting('procurement_buffer_pct', '10'));
-    const avgShawarmaPrice  = parseFloat(getSetting('avg_shawarma_selling_price', '25')) || 25;
+    // avgShawarmaPrice converts shawarma revenue -> estimated pieces (revenue / price = pieces)
+    const avgShawarmaPrice  = parseFloat(p.avgShawarmaPrice) || parseFloat(getSetting('avg_shawarma_selling_price', '25')) || 25;
 
     const shawarmaRevenue   = totalRevenue * shawarmaRevPct / 100;
     const otherRevenue      = totalRevenue - shawarmaRevenue;
 
-    const products    = getSheetData('Products').filter(pr => String(pr.active) !== 'false' && pr.active !== false);
+    const seenProcIds = new Set();
+    const products = getSheetData('Products').filter(pr => {
+      if (!pr.id || (String(pr.active) === 'false' || pr.active === false)) return false;
+      if (seenProcIds.has(pr.id)) return false;
+      seenProcIds.add(pr.id);
+      return true;
+    });
     const recipes     = getSheetData('Recipes');
     const ingredients = getSheetData('Ingredients');
 
@@ -1629,8 +1644,8 @@ function generateProcurementPlan(params) {
 
     return JSON.stringify({
       success:            true,
-      period_start:       p.periodStartDate || '',
-      period_days:        p.periodDays || 7,
+      period_days:        periodDays,
+      daily_revenue:      dailyRevenue,
       estimated_revenue:  totalRevenue,
       shawarma_rev_pct:   shawarmaRevPct,
       other_rev_pct:      100 - shawarmaRevPct,
