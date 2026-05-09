@@ -283,33 +283,37 @@ function DailyEntryTab() {
                 await google.script.run
                     .withSuccessHandler(result => {
                         const data = JSON.parse(result);
-                        if (data && data.inventory) {
+                        if (data && data.dataFound) {
+                            const rawP   = data.rawProteins        || {};
+                            const marinP = data.marinatedProteins  || {};
+                            const breadD = data.bread              || {};
+                            const highC  = data.highCostItems      || {};
                             setFormData(prev => ({
                                 ...prev,
                                 rawProteins: {
                                     ...prev.rawProteins,
-                                    frozen_chicken_breast_opening: data.inventory.frozen_chicken_breast_remaining || '',
-                                    chicken_shawarma_opening: data.inventory.chicken_shawarma_remaining || '',
-                                    steak_opening: data.inventory.steak_remaining || ''
+                                    frozen_chicken_breast_opening: rawP.frozen_chicken_breast_remaining !== undefined ? rawP.frozen_chicken_breast_remaining : '',
+                                    chicken_shawarma_opening:      rawP.chicken_shawarma_remaining      !== undefined ? rawP.chicken_shawarma_remaining      : '',
+                                    steak_opening:                 rawP.steak_remaining                !== undefined ? rawP.steak_remaining                : ''
                                 },
                                 marinatedProteins: {
                                     ...prev.marinatedProteins,
-                                    fahita_chicken_opening: data.inventory.fahita_chicken_remaining || '',
-                                    chicken_sub_opening: data.inventory.chicken_sub_remaining || '',
-                                    spicy_strips_opening: data.inventory.spicy_strips_remaining || '',
-                                    original_strips_opening: data.inventory.original_strips_remaining || '',
-                                     marinated_steak_opening: data.inventory.marinated_steak_remaining || ''
+                                    fahita_chicken_opening:   marinP.fahita_chicken_remaining  !== undefined ? marinP.fahita_chicken_remaining  : '',
+                                    chicken_sub_opening:      marinP.chicken_sub_remaining     !== undefined ? marinP.chicken_sub_remaining     : '',
+                                    spicy_strips_opening:     marinP.spicy_strips_remaining    !== undefined ? marinP.spicy_strips_remaining    : '',
+                                    original_strips_opening:  marinP.original_strips_remaining !== undefined ? marinP.original_strips_remaining : '',
+                                    marinated_steak_opening:  marinP.marinated_steak_remaining !== undefined ? marinP.marinated_steak_remaining : ''
                                 },
                                 bread: {
                                     ...prev.bread,
-                                    saj_bread_opening: data.inventory.saj_bread_remaining || '',
-                                    pita_bread_opening: data.inventory.pita_bread_remaining || '',
-                                    bread_rolls_opening: data.inventory.bread_rolls_remaining || ''
+                                    saj_bread_opening:   breadD.saj_bread_remaining   !== undefined ? breadD.saj_bread_remaining   : '',
+                                    pita_bread_opening:  breadD.pita_bread_remaining  !== undefined ? breadD.pita_bread_remaining  : '',
+                                    bread_rolls_opening: breadD.bread_rolls_remaining !== undefined ? breadD.bread_rolls_remaining : ''
                                 },
                                 highCostItems: {
                                     ...prev.highCostItems,
-                                    cream_opening: data.inventory.cream_remaining || '',
-                                    mayo_opening: data.inventory.mayo_remaining || ''
+                                    cream_opening: highC.cream_remaining !== undefined ? highC.cream_remaining : '',
+                                    mayo_opening:  highC.mayo_remaining  !== undefined ? highC.mayo_remaining  : ''
                                 }
                             }));
                         }

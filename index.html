@@ -1211,29 +1211,42 @@ function DailyEntryTab({ employeeSession }) {
             }
         }
 
-        // Error boundary component
-        function ErrorBoundary({ children }) {
-            const [hasError, setHasError] = React.useState(false);
-            
-            if (hasError) {
-                return React.createElement('div', {
-                    className: 'min-h-screen flex items-center justify-center bg-red-50'
-                },
-                    React.createElement('div', {
-                        className: 'text-center'
-                    },
-                        React.createElement('h2', {
-                            className: 'text-xl font-bold text-red-800 mb-4'
-                        }, 'Something went wrong'),
-                        React.createElement('button', {
-                            onClick: () => setHasError(false),
-                            className: 'bg-red-600 text-white px-4 py-2 rounded'
-                        }, 'Try again')
-                    )
-                );
+        // Root error boundary — must be a class component to catch render errors
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+                this.handleRetry = this.handleRetry.bind(this);
             }
-            
-            return children;
+
+            componentDidCatch(error, info) {
+                console.error('App error caught by ErrorBoundary:', error, info);
+                this.setState({ hasError: true, error: error.message || 'Unknown error' });
+            }
+
+            handleRetry() {
+                this.setState({ hasError: false, error: null });
+            }
+
+            render() {
+                if (this.state.hasError) {
+                    return React.createElement('div', {
+                        className: 'min-h-screen flex items-center justify-center bg-red-50 p-6'
+                    },
+                        React.createElement('div', { className: 'text-center max-w-md' },
+                            React.createElement('div', { className: 'text-5xl mb-4' }, '⚠️'),
+                            React.createElement('h2', { className: 'text-xl font-bold text-red-800 mb-2' }, 'Something went wrong'),
+                            React.createElement('p', { className: 'text-red-600 text-sm mb-4 font-mono bg-red-100 rounded p-2' }, this.state.error),
+                            React.createElement('p', { className: 'text-gray-600 text-sm mb-6' }, 'Your data has not been lost. Click retry to reload the app, or refresh the page.'),
+                            React.createElement('button', {
+                                onClick: this.handleRetry,
+                                className: 'bg-red-600 text-white px-6 py-2 rounded hover:bg-red-700'
+                            }, 'Retry')
+                        )
+                    );
+                }
+                return this.props.children;
+            }
         }
 
         // Initialize the unified app

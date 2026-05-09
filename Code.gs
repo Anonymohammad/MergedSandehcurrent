@@ -377,43 +377,126 @@ function initializeAggregatorSettingsIfNeeded() {
 
 function initializeSystemSettingsIfNeeded() {
   const settingsSheet = getSheetWithNamespace('SystemSettings');
-  
+
   if (!settingsSheet) {
     console.log('SystemSettings sheet not found');
     return;
   }
-  
+
+  const allDefaults = [
+    { setting_name: 'management_pin',          setting_value: '1234',  description: 'PIN required for updating existing daily entries' },
+    { setting_name: 'session_timeout_hours',   setting_value: '8',     description: 'Employee session timeout in hours' },
+    { setting_name: 'default_language',        setting_value: 'en',    description: 'Default language for new employees' },
+    { setting_name: 'shawarma_cost_per_kg',    setting_value: '12.35', description: 'Cost of raw shawarma meat per kg (QAR)' },
+    { setting_name: 'food_cost_target_pct',    setting_value: '22',    description: 'Target food cost percentage to compare actuals against' },
+    { setting_name: 'loss_range_min_pct',      setting_value: '12',    description: 'Minimum acceptable cooking loss percentage' },
+    { setting_name: 'loss_range_max_pct',      setting_value: '28',    description: 'Maximum acceptable cooking loss percentage' },
+    { setting_name: 'remaining_range_min_kg',  setting_value: '0.6',   description: 'Minimum acceptable shawarma remaining weight (kg)' },
+    { setting_name: 'remaining_range_max_kg',  setting_value: '0.85',  description: 'Maximum acceptable shawarma remaining weight (kg)' },
+    { setting_name: 'staff_meals_limit_kg',    setting_value: '0.4',   description: 'Maximum staff meals weight allowed per day (kg)' },
+    { setting_name: 'cream_cost_per_kg',       setting_value: '20',    description: 'Cost of cream per kg (QAR)' },
+    { setting_name: 'mayo_cost_per_kg',        setting_value: '17.5',  description: 'Cost of mayo per kg (QAR)' }
+  ];
+
   if (settingsSheet.getLastRow() > 1) {
-    console.log('System settings already exist, skipping initialization');
+    // Sheet already has data — add any missing settings without touching existing ones
+    const existing = settingsSheet.getDataRange().getValues();
+    const headers = existing[0];
+    const nameIndex = headers.indexOf('setting_name');
+    const existingNames = existing.slice(1).map(r => r[nameIndex]);
+
+    allDefaults.forEach(setting => {
+      if (!existingNames.includes(setting.setting_name)) {
+        settingsSheet.appendRow([
+          Utilities.getUuid(), setting.setting_name, setting.setting_value,
+          setting.description, new Date(), new Date()
+        ]);
+      }
+    });
     return;
   }
-  
-  const settings = [
-    {
-      setting_name: 'management_pin',
-      setting_value: '1234',
-      description: 'PIN required for updating existing daily entries'
-    },
-    {
-      setting_name: 'session_timeout_hours',
-      setting_value: '8',
-      description: 'Employee session timeout in hours'
-    },
-    {
-      setting_name: 'default_language',
-      setting_value: 'en',
-      description: 'Default language for new employees'
-    }
-  ];
-  
-  settings.forEach(setting => {
-    const id = Utilities.getUuid();
-    const row = [
-      id, setting.setting_name, setting.setting_value, setting.description,
-      new Date(), new Date()
-    ];
-    settingsSheet.appendRow(row);
+
+  allDefaults.forEach(setting => {
+    settingsSheet.appendRow([
+      Utilities.getUuid(), setting.setting_name, setting.setting_value,
+      setting.description, new Date(), new Date()
+    ]);
   });
+}
+
+// Helper: read a single setting value by name
+function getSetting(name, defaultValue) {
+  try {
+    const sheet = getSheetWithNamespace('SystemSettings');
+    if (!sheet) return defaultValue !== undefined ? defaultValue : null;
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const nameIdx = headers.indexOf('setting_name');
+    const valIdx  = headers.indexOf('setting_value');
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][nameIdx] === name) return data[i][valIdx];
+    }
+  } catch (e) {
+    Logger.log('getSetting error: ' + e);
+  }
+  return defaultValue !== undefined ? defaultValue : null;
+}
+
+// Expose all settings to the frontend
+function getSystemSettings() {
+  try {
+    const sheet = getSheetWithNamespace('SystemSettings');
+    if (!sheet || sheet.getLastRow() <= 1) return JSON.stringify([]);
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const rows = data.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => obj[h] = row[i]);
+      return obj;
+    });
+    return JSON.stringify(rows);
+  } catch (e) {
+    Logger.log('getSystemSettings error: ' + e);
+    return JSON.stringify([]);
+  }
+}
+
+// Save (upsert) settings from the frontend
+function saveSystemSettings(settingsJson) {
+  try {
+    const updates = JSON.parse(settingsJson);
+    const sheet = getSheetWithNamespace('SystemSettings');
+    if (!sheet) return JSON.stringify({ success: false, message: 'SystemSettings sheet missing' });
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const nameIdx  = headers.indexOf('setting_name');
+    const valIdx   = headers.indexOf('setting_value');
+    const updIdx   = headers.indexOf('updated_at');
+
+    updates.forEach(update => {
+      let found = false;
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][nameIdx] === update.setting_name) {
+          sheet.getRange(i + 1, valIdx + 1).setValue(update.setting_value);
+          if (updIdx !== -1) sheet.getRange(i + 1, updIdx + 1).setValue(new Date());
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        sheet.appendRow([
+          Utilities.getUuid(), update.setting_name, update.setting_value,
+          update.description || '', new Date(), new Date()
+        ]);
+      }
+    });
+
+    return JSON.stringify({ success: true });
+  } catch (e) {
+    Logger.log('saveSystemSettings error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
+  }
 }
 
 // Enhanced employee validation (EXACT from Employee Code.gs)
@@ -549,8 +632,8 @@ function checkExistingEntry(dateString) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const targetDate = new Date(dateString).toDateString();
     
-    const shawarmaData = getSheetData('DailyShawarmaStack');
-    
+    const shawarmaData = getSheetDataRecent('DailyShawarmaStack', 90);
+
     const existingEntry = shawarmaData.find(row => {
       if (!row.date) return false;
       return new Date(row.date).toDateString() === targetDate;
@@ -652,15 +735,16 @@ function saveDailyEntry(entryData) {
       const remainingWeight = parseFloat(stackData.remaining_weight) || 0;
       
       const shawarmaRevenue = parseFloat(entryData.sales?.shawarma_revenue) || 0;
-      const costPerKg = 12.35;
+      const costPerKg = parseFloat(getSetting('shawarma_cost_per_kg', '12.35')) || 12.35;
       const stackCost = startingWeight * costPerKg;
-      
+
       const lossWeight = Math.max(0, startingWeight - (shavingWeight + staffMealsWeight + ordersWeight + remainingWeight));
       const lossPercentage = startingWeight > 0 ? (lossWeight / startingWeight) * 100 : 0;
-      
+
+      // Profit per kg: revenue and cost both divided by ordersWeight (what was actually sold)
       const revenuePerKg = ordersWeight > 0 ? shawarmaRevenue / ordersWeight : 0;
-      const actualCostPerKg = startingWeight > 0 ? stackCost / startingWeight : 0;
-      const profitPerKg = revenuePerKg - actualCostPerKg;
+      const costPerKgSold = ordersWeight > 0 ? stackCost / ordersWeight : 0;
+      const profitPerKg = revenuePerKg - costPerKgSold;
       
       const row = [
         Utilities.getUuid(), entryDate, startingWeight, stackCost, shavingWeight,
@@ -721,15 +805,17 @@ function generateDailyReport(date) {
       targetDateString = new Date().toDateString();
     }
     
-    const shawarmaData = getSheetData('DailyShawarmaStack');
-    const salesData = getSheetData('DailySales');
-    const salesBreakdownData = getSheetData('DailySalesBreakdown');
-    const pettyCashData = getSheetData('DailyPettyCash');
-    const aggregatorSettings = getAggregatorSettings(true);
-    const rawProteinsData = getSheetData('DailyRawProteins');
-    const marinatedProteinsData = getSheetData('DailyMarinatedProteins');
-    const breadData = getSheetData('DailyBreadTracking');
-    const highCostData = getSheetData('DailyHighCostItems');
+    // Read only the last 90 rows from each daily sheet — covers 3 months of entries
+    // while keeping response times fast regardless of how long the sheet has been running.
+    const shawarmaData        = getSheetDataRecent('DailyShawarmaStack',       90);
+    const salesData           = getSheetDataRecent('DailySales',               90);
+    const salesBreakdownData  = getSheetDataRecent('DailySalesBreakdown',      90);
+    const pettyCashData       = getSheetDataRecent('DailyPettyCash',          270); // ~3 entries/day avg
+    const aggregatorSettings  = getAggregatorSettings(true);
+    const rawProteinsData     = getSheetDataRecent('DailyRawProteins',         90);
+    const marinatedProteinsData = getSheetDataRecent('DailyMarinatedProteins', 90);
+    const breadData           = getSheetDataRecent('DailyBreadTracking',       90);
+    const highCostData        = getSheetDataRecent('DailyHighCostItems',       90);
     
     const todayShawarma = shawarmaData.find(row => {
       if (!row.date) return false;
@@ -784,10 +870,14 @@ function generateDailyReport(date) {
       },
       shawarma: todayShawarma || null,
       sales: todaySales || null,
+      salesBreakdown: todaySalesBreakdown || null,
+      pettyCash: todayPettyCash || [],
       rawProteins: todayRawProteins || null,
       marinatedProteins: todayMarinatedProteins || null,
       bread: todayBread || null,
       highCostItems: todayHighCost || null,
+      aggregatorSettings: aggregatorSettings,
+      foodCostTargetPct: parseFloat(getSetting('food_cost_target_pct', '22')) || 22,
       notes: ''
     };
     
@@ -803,15 +893,43 @@ function generateDailyReport(date) {
 function getSheetData(sheetName) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = getSheetWithNamespace(sheetName, ss);
-  
+
   if (!sheet || sheet.getLastRow() <= 1) {
     return [];
   }
-  
+
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  
+
   return data.slice(1).map(row => {
+    const item = {};
+    headers.forEach((header, index) => {
+      item[header] = row[index];
+    });
+    return item;
+  });
+}
+
+// Reads only the most recent N data rows from a sheet — avoids scanning all history.
+// Used for daily-entry sheets where we only ever look up recent dates.
+function getSheetDataRecent(sheetName, maxRows) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = getSheetWithNamespace(sheetName, ss);
+
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  const lastRow  = sheet.getLastRow();
+  const lastCol  = sheet.getLastColumn();
+  const headers  = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+
+  // Read at most maxRows rows, counting back from the last row
+  const rowsAvailable = lastRow - 1; // exclude header
+  const rowsToRead    = Math.min(rowsAvailable, maxRows || 120);
+  const startRow      = lastRow - rowsToRead + 1;
+
+  const values = sheet.getRange(startRow, 1, rowsToRead, lastCol).getValues();
+
+  return values.map(row => {
     const item = {};
     headers.forEach((header, index) => {
       item[header] = row[index];
@@ -937,14 +1055,29 @@ function saveSalesData(entryData, entryDate, employeeId) {
 
   const totalRevenue = parseFloat(salesData.total_revenue) || 0;
   const shawarmaRevenue = parseFloat(salesData.shawarma_revenue) || 0;
-  const estimatedFoodCost = totalRevenue * 0.22;
-  const foodCostPercentage = totalRevenue > 0 ? (estimatedFoodCost / totalRevenue) * 100 : 0;
-  const totalOrders = 0;
+
+  // Actual food cost calculated from tracked ingredients
+  const shawarmaStarting = parseFloat(entryData.shawarmaStack?.starting_weight) || 0;
+  const shawarmaStackCost = shawarmaStarting * (parseFloat(getSetting('shawarma_cost_per_kg', '12.35')) || 12.35);
+
+  const hc = entryData.highCostItems || {};
+  const creamUsed = Math.max(0,
+    (parseFloat(hc.cream_opening) || 0) + (parseFloat(hc.cream_received) || 0)
+    - (parseFloat(hc.cream_expired) || 0) - (parseFloat(hc.cream_remaining) || 0));
+  const mayoUsed = Math.max(0,
+    (parseFloat(hc.mayo_opening) || 0) + (parseFloat(hc.mayo_received) || 0)
+    - (parseFloat(hc.mayo_expired) || 0) - (parseFloat(hc.mayo_remaining) || 0));
+  const creamCost = creamUsed * (parseFloat(getSetting('cream_cost_per_kg', '20')) || 20);
+  const mayoCost  = mayoUsed  * (parseFloat(getSetting('mayo_cost_per_kg',  '17.5')) || 17.5);
+
+  const actualFoodCost = shawarmaStackCost + creamCost + mayoCost;
+  const foodCostPercentage = totalRevenue > 0 ? (actualFoodCost / totalRevenue) * 100 : 0;
+  const totalOrders = 0; // placeholder until Loyverse POS integration
 
   const salesId = Utilities.getUuid();
 
   const row = [
-    salesId, entryDate, totalRevenue, shawarmaRevenue, estimatedFoodCost,
+    salesId, entryDate, totalRevenue, shawarmaRevenue, actualFoodCost,
     foodCostPercentage, totalOrders, employeeId, new Date(), new Date()
   ];
 
@@ -1162,6 +1295,79 @@ function deleteExistingWeeklyEntries(weekStartDate) {
   } catch (error) {
     Logger.log('Error saving weekly entry: ' + error.toString());
     throw new Error('Failed to save weekly entry: ' + error.message);
+  }
+}
+
+// Get petty cash entries for a date range (or all if no range given)
+function getPettyCashHistory(startDate, endDate) {
+  try {
+    // Read last 365 rows (~1 year with ~3 entries/day average) for history queries
+    const data = getSheetDataRecent('DailyPettyCash', 365);
+
+    let filtered = data;
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0,0,0,0);
+      filtered = filtered.filter(row => {
+        if (!row.sales_date) return false;
+        return new Date(row.sales_date) >= start;
+      });
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23,59,59,999);
+      filtered = filtered.filter(row => {
+        if (!row.sales_date) return false;
+        return new Date(row.sales_date) <= end;
+      });
+    }
+
+    // Group by date for easy rendering
+    const byDate = {};
+    filtered.forEach(row => {
+      const dateKey = new Date(row.sales_date).toDateString();
+      if (!byDate[dateKey]) byDate[dateKey] = { date: dateKey, entries: [], total: 0 };
+      byDate[dateKey].entries.push(row);
+      byDate[dateKey].total += parseFloat(row.amount) || 0;
+    });
+
+    return JSON.stringify({ success: true, groups: Object.values(byDate).sort((a,b) => new Date(b.date) - new Date(a.date)) });
+  } catch (e) {
+    Logger.log('getPettyCashHistory error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
+  }
+}
+
+// Get weekly inventory history
+function getWeeklyInventoryHistory(limit) {
+  try {
+    // Each week = multiple rows (one per item), so read more rows than weeks needed
+    const data = getSheetDataRecent('WeeklyInventory', (limit || 12) * 30);
+    if (!data.length) return JSON.stringify({ success: true, weeks: [] });
+
+    // Group items by week_start_date
+    const byWeek = {};
+    data.forEach(row => {
+      const weekKey = new Date(row.week_start_date).toDateString();
+      if (!byWeek[weekKey]) {
+        byWeek[weekKey] = {
+          week_start: weekKey,
+          week_end: row.week_end_date ? new Date(row.week_end_date).toDateString() : '',
+          items: [],
+          notes: row.notes || ''
+        };
+      }
+      byWeek[weekKey].items.push(row);
+    });
+
+    const weeks = Object.values(byWeek)
+      .sort((a,b) => new Date(b.week_start) - new Date(a.week_start))
+      .slice(0, limit || 12);
+
+    return JSON.stringify({ success: true, weeks: weeks });
+  } catch (e) {
+    Logger.log('getWeeklyInventoryHistory error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
   }
 }
 
