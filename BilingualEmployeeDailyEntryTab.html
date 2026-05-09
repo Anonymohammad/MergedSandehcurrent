@@ -1,7 +1,45 @@
 <script type="text/babel">
 function BilingualEmployeeDailyEntryTab({ employeeSession }) {
-    const { t } = React.useContext(window.LanguageContext);
-    
+    const { t, language } = React.useContext(window.LanguageContext);
+
+    // Bilingual tip helper — returns Arabic when the employee's language is Arabic
+    const tip = (en, ar) => language === 'ar' ? ar : en;
+
+    // Tips toggle — persisted in localStorage so it survives page refreshes
+    const [showTips, setShowTips] = React.useState(() => {
+        try { return localStorage.getItem('employeeShowTips') !== 'false'; } catch { return true; }
+    });
+    const toggleTips = () => {
+        const next = !showTips;
+        setShowTips(next);
+        try { localStorage.setItem('employeeShowTips', String(next)); } catch {}
+    };
+
+    // Inline tip bubble — only renders when tips are enabled
+    const TipBox = ({ en, ar }) => showTips ? React.createElement('p', {
+        className: 'text-xs text-blue-400 mt-1 italic'
+    }, '💡 ' + tip(en, ar)) : null;
+
+    // Unit sanity warning — always shown regardless of tips toggle (data quality, not a hint)
+    const UnitWarn = ({ en, ar }) => React.createElement('div', {
+        className: 'mt-1 p-1 bg-orange-50 border border-orange-300 rounded text-xs text-orange-800 flex items-start gap-1'
+    },
+        React.createElement('span', null, '⚠️ '),
+        React.createElement('span', null, tip(en, ar))
+    );
+
+    // Check if a kg value looks like it was entered in grams (> threshold kg is suspicious)
+    const kgEnteredAsGrams = (value, thresholdKg) => {
+        const v = parseFloat(value);
+        return v > 0 && v > thresholdKg;
+    };
+
+    // Check if a piece-count value has a decimal (should be whole number)
+    const hasDecimal = (value) => {
+        const v = parseFloat(value);
+        return v > 0 && v !== Math.floor(v);
+    };
+
     const [formData, setFormData] = React.useState({
         shawarmaStack: {
             starting_weight: '',
@@ -320,11 +358,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                         original_strips_received: data.marinatedProteins ? String(data.marinatedProteins.original_strips_received || '') : '',
                                         original_strips_expired: data.marinatedProteins ? String(data.marinatedProteins.original_strips_expired || '') : '',
                                         original_strips_remaining: data.marinatedProteins ? String(data.marinatedProteins.original_strips_remaining || '') : '',
-    // ADD THESE LINES:
-    marinated_steak_opening: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_opening || '') : '',
-    marinated_steak_received: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_received || '') : '',
-    marinated_steak_expired: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_expired || '') : '',
-    marinated_steak_remaining: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_remaining || '') : ''
+                                        marinated_steak_opening: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_opening || '') : '',
+                                        marinated_steak_received: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_received || '') : '',
+                                        marinated_steak_expired: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_expired || '') : '',
+                                        marinated_steak_remaining: data.marinatedProteins ? String(data.marinatedProteins.marinated_steak_remaining || '') : ''
                                     },
                                     bread: {
                                         saj_bread_opening: data.bread ? String(data.bread.saj_bread_opening || '') : '',
@@ -400,9 +437,8 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                 chicken_sub_opening: '', chicken_sub_received: '', chicken_sub_expired: '', chicken_sub_remaining: '',
                 spicy_strips_opening: '', spicy_strips_received: '', spicy_strips_expired: '', spicy_strips_remaining: '',
                 original_strips_opening: '', original_strips_received: '', original_strips_expired: '', original_strips_remaining: '',
-    // ADD THESE LINES:
-    marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
-},
+                marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
+            },
             bread: {
                 saj_bread_opening: '', saj_bread_received: '', saj_bread_expired: '', saj_bread_remaining: '',
                 pita_bread_opening: '', pita_bread_received: '', pita_bread_expired: '', pita_bread_remaining: '',
@@ -549,8 +585,7 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                 chicken_sub_opening: '', chicken_sub_received: '', chicken_sub_expired: '', chicken_sub_remaining: '',
                 spicy_strips_opening: '', spicy_strips_received: '', spicy_strips_expired: '', spicy_strips_remaining: '',
                 original_strips_opening: '', original_strips_received: '', original_strips_expired: '', original_strips_remaining: '',
-    // ADD THESE LINES:
-    marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
+                marinated_steak_opening: '', marinated_steak_received: '', marinated_steak_expired: '', marinated_steak_remaining: ''
             },
             bread: {
                 saj_bread_opening: '', saj_bread_received: '', saj_bread_expired: '', saj_bread_remaining: '',
@@ -584,13 +619,14 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
         setFieldsLocked(false);
     };
     
-    const renderInventorySection = (titleKey, sectionKey, items, unit) => {
+    const renderInventorySection = (titleKey, sectionKey, items, unit, tipEn, tipAr) => {
         return React.createElement('div', {
             className: 'mb-6'
         },
             React.createElement('h4', {
-                className: 'font-medium text-gray-700 mb-3'
+                className: 'font-medium text-gray-700 mb-1'
             }, t(titleKey)),
+            tipEn && showTips && React.createElement('p', { className: 'text-xs text-blue-400 mb-2 italic' }, '💡 ' + tip(tipEn, tipAr || tipEn)),
             React.createElement('div', {
                 className: 'overflow-x-auto'
             },
@@ -674,15 +710,43 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
         );
     };
     
+    // --- unit sanity checks (always visible — these catch innocent mistakes, not accounting errors) ---
+    // Shawarma spit weights are typically 20–80 kg. > 200 almost certainly means grams were entered.
+    const swKgThreshold = 200;
+    const sw = formData.shawarmaStack;
+
+    // Protein items are measured in kg; > 100 kg of a single item per day is suspicious
+    const proteinKgThreshold = 100;
+
+    // Cream/mayo are measured in kg; > 50 kg is suspicious
+    const sauceKgThreshold = 50;
+
+    // Revenue sanity: a value entered below 50 QAR for a full day is almost certainly missing digits
+    const totalRev = parseFloat(formData.sales.total_revenue) || 0;
+    const revTooLow = totalRev > 0 && totalRev < 50;
+
     return React.createElement('div', {
         className: 'max-w-6xl mx-auto space-y-6'
     },
         React.createElement('div', {
             className: 'bg-white rounded-lg shadow p-6'
         },
-            React.createElement('h2', {
-                className: 'text-2xl font-bold text-gray-800 mb-6'
-            }, t('dailyOperationsEntry')),
+            React.createElement('div', { className: 'flex items-center justify-between mb-6' },
+                React.createElement('h2', {
+                    className: 'text-2xl font-bold text-gray-800'
+                }, t('dailyOperationsEntry')),
+                React.createElement('button', {
+                    type: 'button',
+                    onClick: toggleTips,
+                    className: 'text-xs px-3 py-1 rounded-full border ' + (showTips
+                        ? 'bg-blue-50 border-blue-300 text-blue-600'
+                        : 'bg-gray-100 border-gray-300 text-gray-500'),
+                    title: tip('Toggle field hints', 'إظهار/إخفاء التلميحات')
+                }, showTips
+                    ? tip('💡 Hide tips', '💡 إخفاء التلميحات')
+                    : tip('💡 Show tips', '💡 إظهار التلميحات')
+                )
+            ),
             
             React.createElement('div', {
                 className: 'mb-6 p-4 bg-blue-50 rounded-lg'
@@ -836,9 +900,13 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                     className: 'border border-gray-200 rounded-lg p-6'
                 },
                     React.createElement('h3', {
-                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                        className: 'text-lg font-semibold text-gray-800 mb-1'
                     }, '🥙 ' + t('shawarmaStackManagement')),
-                    
+                    showTips && React.createElement('p', { className: 'text-xs text-gray-400 mb-4 italic' },
+                        tip('All weights in kg — use the scale for each measurement.',
+                            'جميع الأوزان بالكيلوغرام — استخدم الميزان لكل قياس.')
+                    ),
+
                     React.createElement('div', {
                         className: 'grid grid-cols-2 md:grid-cols-5 gap-4'
                     },
@@ -854,9 +922,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 required: true,
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Weigh the stack at shift start.', ar: 'زِن الكمية في بداية الوردية.' })
                         ),
-                        
+
                         React.createElement('div', null,
                             React.createElement('label', {
                                 className: 'block text-sm font-medium mb-1'
@@ -868,9 +937,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 onChange: e => handleInputChange('shawarmaStack', 'orders_weight', e.target.value),
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Total weight sold in orders today.', ar: 'إجمالي وزن الطلبات المباعة اليوم.' })
                         ),
-                        
+
                         React.createElement('div', null,
                             React.createElement('label', {
                                 className: 'block text-sm font-medium mb-1'
@@ -882,9 +952,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 onChange: e => handleInputChange('shawarmaStack', 'shaving_weight', e.target.value),
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Trim/waste from shaving the meat.', ar: 'الفضلات الناتجة عن شاف اللحم.' })
                         ),
-                        
+
                         React.createElement('div', null,
                             React.createElement('label', {
                                 className: 'block text-sm font-medium mb-1'
@@ -896,9 +967,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 onChange: e => handleInputChange('shawarmaStack', 'staff_meals_weight', e.target.value),
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Weight given to staff for meals.', ar: 'وزن وجبات الموظفين.' })
                         ),
-                        
+
                         React.createElement('div', null,
                             React.createElement('label', {
                                 className: 'block text-sm font-medium mb-1'
@@ -911,9 +983,23 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 required: true,
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Weigh what is left at end of shift.', ar: 'زِن ما تبقى في نهاية الوردية.' })
                         )
-                    )
+                    ),
+
+                    kgEnteredAsGrams(sw.starting_weight, swKgThreshold) && React.createElement(UnitWarn, {
+                        en: `Starting weight ${sw.starting_weight} looks like grams — this field is in kg (e.g. enter 25.5 for 25.5 kg).`,
+                        ar: `الوزن ${sw.starting_weight} يبدو بالغرامات — هذا الحقل بالكيلوغرام (مثال: 25.5 لـ 25.5 كغ).`
+                    }),
+                    kgEnteredAsGrams(sw.orders_weight, swKgThreshold) && React.createElement(UnitWarn, {
+                        en: `Orders weight ${sw.orders_weight} looks like grams — this field is in kg.`,
+                        ar: `وزن الطلبات ${sw.orders_weight} يبدو بالغرامات — هذا الحقل بالكيلوغرام.`
+                    }),
+                    kgEnteredAsGrams(sw.remaining_weight, swKgThreshold) && React.createElement(UnitWarn, {
+                        en: `Remaining weight ${sw.remaining_weight} looks like grams — this field is in kg.`,
+                        ar: `الوزن المتبقي ${sw.remaining_weight} يبدو بالغرامات — هذا الحقل بالكيلوغرام.`
+                    })
                 ),
                 
                 React.createElement('div', {
@@ -927,7 +1013,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         {key: 'frozen_chicken_breast', labelKey: 'frozenChickenBreast'},
                         {key: 'chicken_shawarma', labelKey: 'chickenShawarma'},
                         {key: 'steak', labelKey: 'steak'}
-                    ], 'kg')
+                    ], 'kg',
+                    'Opening is auto-filled from yesterday. Enter received, expired, and count remaining at end of shift.',
+                    'الكمية الافتتاحية مأخوذة من أمس تلقائياً. أدخل الوارد والتالف وعُد المتبقي في نهاية الوردية.'
+                    )
                 ),
                 
                 React.createElement('div', {
@@ -943,7 +1032,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         {key: 'spicy_strips', labelKey: 'spicyStrips'},
                         {key: 'original_strips', labelKey: 'originalStrips'},
                         {key: 'marinated_steak', labelKey: 'marinatedSteak'}
-                    ], 'kg')
+                    ], 'kg',
+                    'Count marinated trays at end of shift. If nothing was received or expired, leave those at 0.',
+                    'عُد صواني التتبيل في نهاية الوردية. إذا لم يرد شيء أو لم يتلف، اتركها صفراً.'
+                    )
                 ),
                 
                 React.createElement('div', {
@@ -957,7 +1049,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                         {key: 'saj_bread', labelKey: 'sajBread'},
                         {key: 'pita_bread', labelKey: 'pitaBread'},
                         {key: 'bread_rolls', labelKey: 'breadRolls'}
-                    ], 'pieces')
+                    ], 'pieces',
+                    'Count pieces. Expired = unsold or damaged bread discarded today.',
+                    'عُد القطع. التالف = خبز لم يُباع أو تضرر وتم التخلص منه اليوم.'
+                    )
                 ),
                 
                 React.createElement('div', {
@@ -970,15 +1065,22 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                     renderInventorySection('highCostItems', 'highCostItems', [
                         {key: 'cream', labelKey: 'cream'},
                         {key: 'mayo', labelKey: 'mayo'}
-                    ], 'kg')
+                    ], 'kg',
+                    'Weigh cream and mayo carefully — these are tracked for cost accuracy.',
+                    'زِن الكريمة والمايونيز بدقة — يتم تتبعها لحساب التكلفة.'
+                    )
                 ),
                 
                 React.createElement('div', {
                     className: 'border border-gray-200 rounded-lg p-6'
                 },
                     React.createElement('h3', {
-                        className: 'text-lg font-semibold text-gray-800 mb-4'
+                        className: 'text-lg font-semibold text-gray-800 mb-1'
                     }, '💵 ' + t('dailySales')),
+                    showTips && React.createElement('p', { className: 'text-xs text-blue-400 mb-4 italic' },
+                        '💡 ' + tip('Take both numbers from the POS Z-report or daily summary printout.',
+                                    'خذ كلا الرقمين من تقرير Z في الكاشير أو ملخص اليوم.')
+                    ),
 
                     React.createElement('div', {
                         className: 'grid grid-cols-1 md:grid-cols-2 gap-4'
@@ -995,7 +1097,8 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 required: true,
                                 disabled: fieldsLocked
-                            })
+                            }),
+                            React.createElement(TipBox, { en: 'Grand total from the POS closing report.', ar: 'الإجمالي الكلي من تقرير إغلاق الكاشير.' })
                         ),
                         React.createElement('div', null,
                             React.createElement('label', {
@@ -1009,6 +1112,11 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 className: 'w-full p-2 border rounded focus:ring-2 focus:ring-redbrand-500' + (fieldsLocked ? ' bg-gray-100' : ''),
                                 required: true,
                                 disabled: fieldsLocked
+                            }),
+                            React.createElement(TipBox, { en: 'Shawarma category total only, from the POS category filter.', ar: 'إجمالي تصنيف الشاورما فقط، من فلتر التصنيف في الكاشير.' }),
+                            revTooLow && React.createElement(UnitWarn, {
+                                en: `Total revenue is ${totalRev} QAR — double-check this isn't missing a digit.`,
+                                ar: `الإيراد الكلي ${totalRev} ريال — تحقق أن الرقم مكتمل.`
                             })
                         )
                     )
@@ -1017,7 +1125,10 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                 React.createElement('div', { className: 'border border-gray-200 rounded-lg p-6 space-y-4' },
                     React.createElement('div', { className: 'flex items-center justify-between flex-wrap gap-2' },
                         React.createElement('h4', { className: 'font-medium text-gray-800' }, t('paymentMethodBreakdown') || 'Payment Method Breakdown'),
-                        React.createElement('p', { className: 'text-sm text-gray-500' }, t('paymentBreakdownHint') || 'Optional: helps reconcile totals without changing existing sales table')
+                        showTips && React.createElement('p', { className: 'text-sm text-gray-500' },
+                            '💡 ' + tip('Optional — enter how the total was collected: cash, card, delivery apps.',
+                                        'اختياري — أدخل كيف جُمع الإيراد: كاش، بطاقة، تطبيقات التوصيل.')
+                        )
                     ),
                     React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
                         ['cash_sales', 'card_sales'].map(key => (
@@ -1072,7 +1183,9 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
                                 disabled: fieldsLocked
                             })
                         )
-                    )
+                    ),
+
+                    React.createElement('span', null)
                 ),
 
                 React.createElement('div', { className: 'flex items-center justify-between mt-4 p-4 bg-gray-50 rounded-lg border' },

@@ -59,14 +59,43 @@ function BilingualEmployeeWeeklyEntryTab({ employeeSession }) {
         }
     ];
 
-    const weekStartDay = 4; // Thursday
+    // Period settings — loaded from SystemSettings, defaulting to weekly on Thursday
+    const [periodDays, setPeriodDays] = React.useState(7);
+    const [periodStartDay, setPeriodStartDay] = React.useState(4); // 0=Sun … 4=Thu … 6=Sat
 
-    const getWeekStart = (date) => {
+    React.useEffect(() => {
+        google.script.run
+            .withSuccessHandler(data => {
+                try {
+                    const settings = JSON.parse(data);
+                    const days = settings.find && settings.find(s => s.setting_name === 'inventory_period_days');
+                    const startDay = settings.find && settings.find(s => s.setting_name === 'inventory_period_start_day');
+                    if (days)     setPeriodDays(parseInt(days.setting_value) || 7);
+                    if (startDay) setPeriodStartDay(parseInt(startDay.setting_value) || 4);
+                } catch(e) {}
+            })
+            .withFailureHandler(() => {}) // silently fall back to defaults
+            .getSystemSettings();
+    }, []);
+
+    // Snap a date to the most recent period-start day, then use periodDays for the end
+    const getPeriodStart = (date) => {
         const d = new Date(date);
-        const diff = (d.getDay() >= weekStartDay ? d.getDay() - weekStartDay : 7 - (weekStartDay - d.getDay()));
+        const diff = (d.getDay() >= periodStartDay
+            ? d.getDay() - periodStartDay
+            : 7 - (periodStartDay - d.getDay()));
         d.setDate(d.getDate() - diff);
         return d.toISOString().split('T')[0];
     };
+
+    const getPeriodEnd = (startDateStr) => {
+        const d = new Date(startDateStr);
+        d.setDate(d.getDate() + periodDays - 1);
+        return d.toISOString().split('T')[0];
+    };
+
+    // Keep backward-compatible alias used in the rest of the form
+    const getWeekStart = getPeriodStart;
 
     // Build default form state
     const buildDefaultState = () => {
@@ -161,7 +190,7 @@ function BilingualEmployeeWeeklyEntryTab({ employeeSession }) {
     const loadPreviousWeekData = async () => {
         try {
             const prevDate = new Date(selectedDate);
-            prevDate.setDate(prevDate.getDate() - 7);
+            prevDate.setDate(prevDate.getDate() - periodDays);
             const prevWeekStart = getWeekStart(prevDate);
             await google.script.run
                 .withSuccessHandler(result => {
@@ -233,7 +262,7 @@ function BilingualEmployeeWeeklyEntryTab({ employeeSession }) {
     const submitForm = async () => {
         const weekStart = selectedDate;
         const weekEnd = new Date(selectedDate);
-        weekEnd.setDate(weekEnd.getDate() + 6);
+        weekEnd.setDate(weekEnd.getDate() + periodDays - 1);
 
         const items = [];
         inventorySections.forEach(section => {

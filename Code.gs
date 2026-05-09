@@ -25,14 +25,16 @@ const REQUIRED_SHEETS = {
   Ingredients: {
     requiredHeaders: [
       'id', 'name', 'category', 'unit', 'cost_per_unit', 'quantity', 'min_stock', 'max_stock',
-      'supplier_id', 'last_purchase_date', 'storage_location', 'created_at', 'updated_at'
+      'supplier_id', 'last_purchase_date', 'storage_location',
+      'purchase_unit_size', 'purchase_unit_name',
+      'created_at', 'updated_at'
     ]
   },
-  
+
   Products: {
     requiredHeaders: [
       'id', 'name', 'category', 'description', 'selling_price', 'cost_price',
-      'active', 'created_at', 'updated_at'
+      'active', 'sales_mix_pct', 'created_at', 'updated_at'
     ]
   },
   
@@ -395,7 +397,12 @@ function initializeSystemSettingsIfNeeded() {
     { setting_name: 'remaining_range_max_kg',  setting_value: '0.85',  description: 'Maximum acceptable shawarma remaining weight (kg)' },
     { setting_name: 'staff_meals_limit_kg',    setting_value: '0.4',   description: 'Maximum staff meals weight allowed per day (kg)' },
     { setting_name: 'cream_cost_per_kg',       setting_value: '20',    description: 'Cost of cream per kg (QAR)' },
-    { setting_name: 'mayo_cost_per_kg',        setting_value: '17.5',  description: 'Cost of mayo per kg (QAR)' }
+    { setting_name: 'mayo_cost_per_kg',        setting_value: '17.5',  description: 'Cost of mayo per kg (QAR)' },
+    { setting_name: 'other_food_cost_pct',       setting_value: '0',    description: 'Estimated cost % for untracked items (bread, sauces, packaging) applied to total revenue. Set once you know your average.' },
+    { setting_name: 'inventory_period_days',     setting_value: '7',    description: 'Number of days between inventory counts (7 = weekly, 1 = daily, etc.)' },
+    { setting_name: 'inventory_period_start_day',setting_value: '4',    description: 'Day of week the inventory period starts: 0=Sunday, 1=Monday, 4=Thursday, 5=Friday' },
+    { setting_name: 'procurement_buffer_pct',    setting_value: '10',   description: 'Safety buffer % added on top of calculated ingredient needs for procurement planning' },
+    { setting_name: 'avg_shawarma_selling_price',setting_value: '25',   description: 'Average shawarma item selling price (QAR) — used when product has no price set' }
   ];
 
   if (settingsSheet.getLastRow() > 1) {
@@ -741,10 +748,12 @@ function saveDailyEntry(entryData) {
       const lossWeight = Math.max(0, startingWeight - (shavingWeight + staffMealsWeight + ordersWeight + remainingWeight));
       const lossPercentage = startingWeight > 0 ? (lossWeight / startingWeight) * 100 : 0;
 
-      // Profit per kg: revenue and cost both divided by ordersWeight (what was actually sold)
+      // Profit per kg: (total revenue from shawarma - full stack cost) ÷ kg actually sold as orders.
+      // Only calculated when both revenue and orders weight are entered — returns 0 otherwise
+      // to avoid storing misleading negatives caused by missing revenue entries.
       const revenuePerKg = ordersWeight > 0 ? shawarmaRevenue / ordersWeight : 0;
       const costPerKgSold = ordersWeight > 0 ? stackCost / ordersWeight : 0;
-      const profitPerKg = revenuePerKg - costPerKgSold;
+      const profitPerKg = (ordersWeight > 0 && shawarmaRevenue > 0) ? revenuePerKg - costPerKgSold : 0;
       
       const row = [
         Utilities.getUuid(), entryDate, startingWeight, stackCost, shavingWeight,
@@ -988,11 +997,10 @@ function saveMarinatedProteinsData(entryData, entryDate, employeeId) {
     parseFloat(marinatedData.original_strips_received) || 0,
     parseFloat(marinatedData.original_strips_expired) || 0,
     parseFloat(marinatedData.original_strips_remaining) || 0,
-    // ADD THESE NEW LINES FOR MARINATED STEAK:
-      parseFloat(entryData.marinatedProteins.marinated_steak_opening) || 0,
-      parseFloat(entryData.marinatedProteins.marinated_steak_received) || 0,
-      parseFloat(entryData.marinatedProteins.marinated_steak_expired) || 0,
-      parseFloat(entryData.marinatedProteins.marinated_steak_remaining) || 0,
+    parseFloat(marinatedData.marinated_steak_opening) || 0,
+    parseFloat(marinatedData.marinated_steak_received) || 0,
+    parseFloat(marinatedData.marinated_steak_expired) || 0,
+    parseFloat(marinatedData.marinated_steak_remaining) || 0,
     employeeId, new Date(), new Date()
   ];
   
@@ -1070,7 +1078,12 @@ function saveSalesData(entryData, entryDate, employeeId) {
   const creamCost = creamUsed * (parseFloat(getSetting('cream_cost_per_kg', '20')) || 20);
   const mayoCost  = mayoUsed  * (parseFloat(getSetting('mayo_cost_per_kg',  '17.5')) || 17.5);
 
-  const actualFoodCost = shawarmaStackCost + creamCost + mayoCost;
+  // Other food costs (bread, sauces, packaging, and anything not individually tracked)
+  // estimated as a configurable percentage of total revenue. Set to 0 to ignore.
+  const otherFoodCostPct = parseFloat(getSetting('other_food_cost_pct', '0')) || 0;
+  const otherFoodCost = totalRevenue * otherFoodCostPct / 100;
+
+  const actualFoodCost = shawarmaStackCost + creamCost + mayoCost + otherFoodCost;
   const foodCostPercentage = totalRevenue > 0 ? (actualFoodCost / totalRevenue) * 100 : 0;
   const totalOrders = 0; // placeholder until Loyverse POS integration
 
@@ -1393,5 +1406,207 @@ function generateWeeklyReport(date) {
   } catch (error) {
     Logger.log('Error generating weekly report: ' + error.toString());
     throw new Error('Failed to generate weekly report: ' + error.message);
+  }
+}
+
+// ─── Procurement Planning ────────────────────────────────────────────────────
+
+// Returns all active products with their full recipe (ingredient list) attached.
+function getProductsWithRecipes() {
+  try {
+    const products   = getSheetData('Products').filter(p => String(p.active) !== 'false' && p.active !== false);
+    const recipes    = getSheetData('Recipes');
+    const ingredients = getSheetData('Ingredients');
+
+    const ingMap = {};
+    ingredients.forEach(ing => { ingMap[ing.id] = ing; });
+
+    const recipeMap = {};
+    recipes.forEach(r => {
+      if (!recipeMap[r.product_id]) recipeMap[r.product_id] = [];
+      recipeMap[r.product_id].push({
+        ingredient_id:   r.ingredient_id,
+        ingredient_name: ingMap[r.ingredient_id] ? ingMap[r.ingredient_id].name : r.ingredient_id,
+        quantity_needed: parseFloat(r.quantity_needed) || 0,
+        unit:            r.unit
+      });
+    });
+
+    const result = products.map(p => ({
+      id:            p.id,
+      name:          p.name,
+      category:      p.category,
+      selling_price: parseFloat(p.selling_price) || 0,
+      active:        p.active,
+      sales_mix_pct: parseFloat(p.sales_mix_pct) || 0,
+      recipe:        recipeMap[p.id] || []
+    }));
+
+    return JSON.stringify({ success: true, products: result });
+  } catch (e) {
+    Logger.log('getProductsWithRecipes error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
+  }
+}
+
+// Save the sales_mix_pct for each product (used by procurement planner).
+function saveProductSalesMix(productMixJson) {
+  try {
+    const mix   = JSON.parse(productMixJson); // [{ id, sales_mix_pct }, ...]
+    const sheet = getSheetWithNamespace('Products');
+    if (!sheet) throw new Error('Products sheet not found');
+
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('id');
+    const mixIdx  = headers.indexOf('sales_mix_pct');
+    if (mixIdx === -1) throw new Error('sales_mix_pct column not found in Products sheet');
+
+    mix.forEach(item => {
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][idIdx]) === String(item.id)) {
+          sheet.getRange(i + 1, mixIdx + 1).setValue(parseFloat(item.sales_mix_pct) || 0);
+          break;
+        }
+      }
+    });
+
+    return JSON.stringify({ success: true });
+  } catch (e) {
+    Logger.log('saveProductSalesMix error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
+  }
+}
+
+// Main procurement planner: given estimated revenue and product mix, calculate
+// ingredient requirements per period, compare to current stock, and flag restock items.
+// params: { periodStartDate, periodDays, estimatedRevenue, shawarmaRevenuePct, bufferPct }
+function generateProcurementPlan(params) {
+  try {
+    const p = typeof params === 'string' ? JSON.parse(params) : params;
+
+    const totalRevenue      = parseFloat(p.estimatedRevenue)    || 0;
+    const shawarmaRevPct    = parseFloat(p.shawarmaRevenuePct)  || parseFloat(getSetting('shawarma_pct_default', '60'));
+    const bufferPct         = parseFloat(p.bufferPct)           || parseFloat(getSetting('procurement_buffer_pct', '10'));
+    const avgShawarmaPrice  = parseFloat(getSetting('avg_shawarma_selling_price', '25')) || 25;
+
+    const shawarmaRevenue   = totalRevenue * shawarmaRevPct / 100;
+    const otherRevenue      = totalRevenue - shawarmaRevenue;
+
+    const products    = getSheetData('Products').filter(pr => String(pr.active) !== 'false' && pr.active !== false);
+    const recipes     = getSheetData('Recipes');
+    const ingredients = getSheetData('Ingredients');
+
+    // Build lookup maps
+    const ingMap = {};
+    ingredients.forEach(ing => { ingMap[ing.id] = ing; });
+
+    const recipeMap = {};
+    recipes.forEach(r => {
+      if (!recipeMap[r.product_id]) recipeMap[r.product_id] = [];
+      recipeMap[r.product_id].push(r);
+    });
+
+    // Separate products by group
+    const shawarmaProducts = products.filter(pr => (pr.category || '').toLowerCase().includes('shawarma'));
+    const otherProducts    = products.filter(pr => !(pr.category || '').toLowerCase().includes('shawarma'));
+
+    // Running totals per ingredient
+    const ingTotals = {}; // id -> needed qty
+    const addNeed   = (ingId, qty) => { ingTotals[ingId] = (ingTotals[ingId] || 0) + qty; };
+
+    // Helper: process a group of products given their pool revenue
+    const processGroup = (group, poolRevenue) => {
+      const totalMixPct = group.reduce((s, pr) => s + (parseFloat(pr.sales_mix_pct) || 0), 0);
+      return group.map(pr => {
+        const mixPct       = parseFloat(pr.sales_mix_pct) || 0;
+        // If no mix % is set, distribute evenly across group
+        const share        = totalMixPct > 0 ? mixPct / totalMixPct : (group.length > 0 ? 1 / group.length : 0);
+        const productRev   = poolRevenue * share;
+        const sellingPrice = parseFloat(pr.selling_price) || avgShawarmaPrice;
+        const estQty       = sellingPrice > 0 ? productRev / sellingPrice : 0;
+
+        const productRecipes = recipeMap[pr.id] || [];
+        const lines = productRecipes.map(r => {
+          const totalQty = estQty * (parseFloat(r.quantity_needed) || 0);
+          addNeed(r.ingredient_id, totalQty);
+          return {
+            ingredient_id:   r.ingredient_id,
+            ingredient_name: ingMap[r.ingredient_id] ? ingMap[r.ingredient_id].name : r.ingredient_id,
+            unit:            r.unit,
+            qty_per_item:    parseFloat(r.quantity_needed) || 0,
+            total_qty:       totalQty
+          };
+        });
+
+        return {
+          id:            pr.id,
+          name:          pr.name,
+          category:      pr.category,
+          sales_mix_pct: mixPct,
+          selling_price: sellingPrice,
+          est_qty:       Math.round(estQty),
+          est_revenue:   productRev,
+          has_recipe:    lines.length > 0,
+          recipe_lines:  lines
+        };
+      });
+    };
+
+    const shawarmaResults = processGroup(shawarmaProducts, shawarmaRevenue);
+    const otherResults    = processGroup(otherProducts,    otherRevenue);
+
+    // Build ingredient result list
+    const ingredientList = Object.keys(ingTotals).map(ingId => {
+      const ing          = ingMap[ingId];
+      const neededRaw    = ingTotals[ingId];
+      const withBuffer   = neededRaw * (1 + bufferPct / 100);
+      const currentStock = parseFloat(ing ? ing.quantity : 0) || 0;
+      const deficit      = Math.max(0, withBuffer - currentStock);
+
+      const purchaseUnitSize = parseFloat(ing ? ing.purchase_unit_size : 0) || 0;
+      const purchaseUnitName = ing ? (ing.purchase_unit_name || '') : '';
+      let orderQty   = deficit;
+      let orderUnits = null;
+      if (purchaseUnitSize > 0 && deficit > 0) {
+        orderUnits = Math.ceil(deficit / purchaseUnitSize);
+        orderQty   = orderUnits * purchaseUnitSize;
+      }
+
+      return {
+        ingredient_id:      ingId,
+        name:               ing ? ing.name : ingId,
+        category:           ing ? ing.category : '',
+        unit:               ing ? ing.unit : '',
+        needed_raw:         Math.round(neededRaw * 100) / 100,
+        needed_with_buffer: Math.round(withBuffer * 100) / 100,
+        current_stock:      currentStock,
+        deficit:            Math.round(deficit * 100) / 100,
+        order_qty:          Math.round(orderQty * 100) / 100,
+        order_units:        orderUnits,
+        purchase_unit_size: purchaseUnitSize,
+        purchase_unit_name: purchaseUnitName,
+        needs_restock:      deficit > 0,
+        supplier_id:        ing ? (ing.supplier_id || '') : ''
+      };
+    }).sort((a, b) => (b.needs_restock ? 1 : 0) - (a.needs_restock ? 1 : 0) || a.name.localeCompare(b.name));
+
+    return JSON.stringify({
+      success:            true,
+      period_start:       p.periodStartDate || '',
+      period_days:        p.periodDays || 7,
+      estimated_revenue:  totalRevenue,
+      shawarma_rev_pct:   shawarmaRevPct,
+      other_rev_pct:      100 - shawarmaRevPct,
+      buffer_pct:         bufferPct,
+      shawarma_products:  shawarmaResults,
+      other_products:     otherResults,
+      ingredients:        ingredientList,
+      restock_alerts:     ingredientList.filter(i => i.needs_restock),
+      no_recipe_products: [...shawarmaResults, ...otherResults].filter(p => !p.has_recipe).map(p => p.name)
+    });
+  } catch (e) {
+    Logger.log('generateProcurementPlan error: ' + e);
+    return JSON.stringify({ success: false, message: e.toString() });
   }
 }
