@@ -7,12 +7,12 @@ function BilingualEmployeeDailyEntryTab({ employeeSession }) {
 
     // Tips toggle — persisted in localStorage so it survives page refreshes
     const [showTips, setShowTips] = React.useState(() => {
-        try { return localStorage.getItem('employeeShowTips') !== 'false'; } catch { return true; }
+        try { return localStorage.getItem('employeeShowTips') !== 'false'; } catch (e) { return true; }
     });
     const toggleTips = () => {
         const next = !showTips;
         setShowTips(next);
-        try { localStorage.setItem('employeeShowTips', String(next)); } catch {}
+        try { localStorage.setItem('employeeShowTips', String(next)); } catch (e) {}
     };
 
     // Inline tip bubble — only renders when tips are enabled
