@@ -1515,46 +1515,82 @@ function generateProcurementPlan(params) {
     const ingTotals = {}; // id -> needed qty
     const addNeed   = (ingId, qty) => { ingTotals[ingId] = (ingTotals[ingId] || 0) + qty; };
 
-    // Helper: process a group of products given their pool revenue
-    const processGroup = (group, poolRevenue) => {
-      const totalMixPct = group.reduce((s, pr) => s + (parseFloat(pr.sales_mix_pct) || 0), 0);
-      return group.map(pr => {
-        const mixPct       = parseFloat(pr.sales_mix_pct) || 0;
-        // If no mix % is set, distribute evenly across group
-        const share        = totalMixPct > 0 ? mixPct / totalMixPct : (group.length > 0 ? 1 / group.length : 0);
-        const productRev   = poolRevenue * share;
-        const sellingPrice = parseFloat(pr.selling_price) || avgShawarmaPrice;
-        const estQty       = sellingPrice > 0 ? productRev / sellingPrice : 0;
+    // ── Shawarma: treated as a single pool ──────────────────────────────────
+    // All shawarma product recipes are merged — if an ingredient appears in
+    // multiple variants its per-item quantity is averaged across those variants.
+    // Per-variant breakdown is deferred until POS integration.
+    const totalShawarmaQty = avgShawarmaPrice > 0 ? shawarmaRevenue / avgShawarmaPrice : 0;
 
-        const productRecipes = recipeMap[pr.id] || [];
-        const lines = productRecipes.map(r => {
-          const totalQty = estQty * (parseFloat(r.quantity_needed) || 0);
-          addNeed(r.ingredient_id, totalQty);
-          return {
-            ingredient_id:   r.ingredient_id,
-            ingredient_name: ingMap[r.ingredient_id] ? ingMap[r.ingredient_id].name : r.ingredient_id,
-            unit:            r.unit,
-            qty_per_item:    parseFloat(r.quantity_needed) || 0,
-            total_qty:       totalQty
-          };
-        });
-
-        return {
-          id:            pr.id,
-          name:          pr.name,
-          category:      pr.category,
-          sales_mix_pct: mixPct,
-          selling_price: sellingPrice,
-          est_qty:       Math.round(estQty),
-          est_revenue:   productRev,
-          has_recipe:    lines.length > 0,
-          recipe_lines:  lines
-        };
+    const shawarmaIngMap = {}; // ingredientId -> { totalQty, count, unit }
+    shawarmaProducts.forEach(pr => {
+      (recipeMap[pr.id] || []).forEach(r => {
+        if (!shawarmaIngMap[r.ingredient_id]) {
+          shawarmaIngMap[r.ingredient_id] = { totalQty: 0, count: 0, unit: r.unit };
+        }
+        shawarmaIngMap[r.ingredient_id].totalQty += parseFloat(r.quantity_needed) || 0;
+        shawarmaIngMap[r.ingredient_id].count    += 1;
       });
+    });
+
+    const shawarmaIngredientLines = Object.keys(shawarmaIngMap).map(ingId => {
+      const { totalQty, count, unit } = shawarmaIngMap[ingId];
+      const avgQtyPerItem = count > 0 ? totalQty / count : 0;
+      const needed        = totalShawarmaQty * avgQtyPerItem;
+      addNeed(ingId, needed);
+      return {
+        ingredient_id:    ingId,
+        ingredient_name:  ingMap[ingId] ? ingMap[ingId].name : ingId,
+        unit,
+        avg_qty_per_item: Math.round(avgQtyPerItem * 1000) / 1000,
+        total_qty:        Math.round(needed * 100) / 100
+      };
+    });
+
+    const shawarmaResult = {
+      name:         'Shawarma (all variants)',
+      est_qty:      Math.round(totalShawarmaQty),
+      est_revenue:  shawarmaRevenue,
+      has_recipe:   shawarmaIngredientLines.length > 0,
+      recipe_lines: shawarmaIngredientLines,
+      note:         'Per-variant breakdown available after POS integration'
     };
 
-    const shawarmaResults = processGroup(shawarmaProducts, shawarmaRevenue);
-    const otherResults    = processGroup(otherProducts,    otherRevenue);
+    // ── Other products: distribute by sales_mix_pct, equal if all unset ─────
+    // Normalize relative weights: if totalMixPct == 0 every product gets equal share.
+    const otherTotalMixPct = otherProducts.reduce((s, pr) => s + (parseFloat(pr.sales_mix_pct) || 0), 0);
+    const otherResults = otherProducts.map(pr => {
+      const mixPct       = parseFloat(pr.sales_mix_pct) || 0;
+      const share        = otherTotalMixPct > 0
+                             ? mixPct / otherTotalMixPct
+                             : (otherProducts.length > 0 ? 1 / otherProducts.length : 0);
+      const productRev   = otherRevenue * share;
+      const sellingPrice = parseFloat(pr.selling_price) || 1;
+      const estQty       = sellingPrice > 0 ? productRev / sellingPrice : 0;
+
+      const lines = (recipeMap[pr.id] || []).map(r => {
+        const totalQty = estQty * (parseFloat(r.quantity_needed) || 0);
+        addNeed(r.ingredient_id, totalQty);
+        return {
+          ingredient_id:   r.ingredient_id,
+          ingredient_name: ingMap[r.ingredient_id] ? ingMap[r.ingredient_id].name : r.ingredient_id,
+          unit:            r.unit,
+          qty_per_item:    parseFloat(r.quantity_needed) || 0,
+          total_qty:       Math.round(totalQty * 100) / 100
+        };
+      });
+
+      return {
+        id:            pr.id,
+        name:          pr.name,
+        category:      pr.category,
+        sales_mix_pct: mixPct,
+        selling_price: sellingPrice,
+        est_qty:       Math.round(estQty),
+        est_revenue:   productRev,
+        has_recipe:    lines.length > 0,
+        recipe_lines:  lines
+      };
+    });
 
     // Build ingredient result list
     const ingredientList = Object.keys(ingTotals).map(ingId => {
@@ -1599,11 +1635,12 @@ function generateProcurementPlan(params) {
       shawarma_rev_pct:   shawarmaRevPct,
       other_rev_pct:      100 - shawarmaRevPct,
       buffer_pct:         bufferPct,
-      shawarma_products:  shawarmaResults,
+      shawarma:           shawarmaResult,
       other_products:     otherResults,
       ingredients:        ingredientList,
       restock_alerts:     ingredientList.filter(i => i.needs_restock),
-      no_recipe_products: [...shawarmaResults, ...otherResults].filter(p => !p.has_recipe).map(p => p.name)
+      no_recipe_products: (!shawarmaResult.has_recipe ? ['Shawarma (no recipe configured)'] : [])
+                            .concat(otherResults.filter(p => !p.has_recipe).map(p => p.name))
     });
   } catch (e) {
     Logger.log('generateProcurementPlan error: ' + e);
